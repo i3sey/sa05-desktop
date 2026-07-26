@@ -121,15 +121,25 @@ jobs:
           npm ci
           npm run build
 
-      # The Windows GUI and helper are not finished yet; compiling the shared packages
-      # here keeps the platform from silently rotting while that work lands.
-      - name: Сборка общих пакетов
+      - name: Бинарники
         shell: bash
         run: |
-          go build ./internal/...
-          go build -o sa05ctl.exe ./cmd/sa05ctl
-          go vet ./internal/...
+          mkdir -p build/out
+          # -H windowsgui keeps a console window from opening behind the GUI.
+          go build -tags "desktop,production" -ldflags "-H windowsgui" -o build/out/sa05.exe ./cmd/sa05
+          go build -o build/out/sa05ctl.exe ./cmd/sa05ctl
+          go build -o build/out/sa05-helper.exe ./cmd/sa05-helper
+
+      - name: go vet
+        shell: bash
+        run: go vet ./internal/... ./cmd/sa05ctl ./cmd/sa05-helper
 
       - name: Тесты
         shell: bash
-        run: go test -count=1 ./internal/core/... ./internal/storage/... ./internal/tgws/...
+        run: go test -count=1 ./internal/... ./cmd/sa05ctl ./cmd/sa05-helper
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sa05-windows-amd64-ci
+          path: build/out/
+          retention-days: 7

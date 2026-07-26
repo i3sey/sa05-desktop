@@ -15,11 +15,10 @@ permissions:
 env:
   GO_VERSION: '1.26'
   NODE_VERSION: '22'
-  GUI_TAGS: desktop,production,webkit2_41
 
 jobs:
   linux:
-    name: Релиз (Linux amd64)
+    name: Сборка (Linux amd64)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -42,6 +41,7 @@ jobs:
 
       - name: Версия
         id: version
+        shell: bash
         run: |
           version="${GITHUB_REF_NAME}"
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
@@ -64,12 +64,12 @@ jobs:
         run: |
           mkdir -p build/out
           flags="-w -s -X main.version=$VERSION"
-          go build -tags "$GUI_TAGS" -ldflags "$flags" -o build/out/sa05 ./cmd/sa05
+          go build -tags "desktop,production,webkit2_41" -ldflags "$flags" -o build/out/sa05 ./cmd/sa05
           go build -ldflags "$flags" -o build/out/sa05ctl ./cmd/sa05ctl
           go build -ldflags "$flags" -o build/out/sa05-helper ./cmd/sa05-helper
 
-      # Geo databases ship with the release: without them any profile using geosite:
-      # rules refuses to start, and asking users to fetch 30 MB by hand is not an install.
+      # Geo databases ship with the release: without them any profile using geosite: rules
+      # refuses to start, and asking users to fetch 30 MB by hand is not an install.
       - name: Гео-базы
         run: build/fetch-geoassets.sh build/out/assets
 
@@ -87,26 +87,125 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: sa05-linux-amd64-release
+          name: sa05-linux-amd64
           path: dist/*.tar.gz*
+          retention-days: 14
 
-      - name: Публикация релиза
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+  windows:
+    name: Сборка (Windows amd64)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
         with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Версия
+        id: version
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            version="${{ github.event.inputs.version }}"
+          fi
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Вендоринг Xray-core
+        shell: bash
+        run: build/vendor-xray.sh
+
+      - name: Фронтенд
+        shell: bash
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+
+      - name: Бинарники
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          mkdir -p build/out
+          flags="-w -s -X main.version=$VERSION"
+          # -H windowsgui keeps a console window from opening behind the GUI.
+          go build -tags "desktop,production" -ldflags "$flags -H windowsgui" -o build/out/sa05.exe ./cmd/sa05
+          go build -ldflags "$flags" -o build/out/sa05ctl.exe ./cmd/sa05ctl
+          go build -ldflags "$flags" -o build/out/sa05-helper.exe ./cmd/sa05-helper
+
+      - name: Гео-базы
+        shell: bash
+        run: build/fetch-geoassets.sh build/out/assets
+
+      - name: Пакет
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          name="sa05-$VERSION-windows-amd64"
+          mkdir -p "dist/$name"
+          cp -r build/out/* "dist/$name/"
+          cp README.md LICENSE THIRD_PARTY_NOTICES.md "dist/$name/"
+          ( cd dist && 7z a -tzip "$name.zip" "$name" >/dev/null )
+          ( cd dist && certutil -hashfile "$name.zip" SHA256 | sed -n 2p | tr -d ' \r' > "$name.zip.sha256" )
+          ls -l dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sa05-windows-amd64
+          path: dist/*.zip*
+          retention-days: 14
+
+  draft:
+    name: Черновик релиза
+    needs: [linux, windows]
+    runs-on: ubuntu-24.04
+    # Only a tag produces a release; a manual run stops at the artifacts above.
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - run: ls -lh dist
+
+      # Draft, not published: the tag builds the artifacts, a human decides when they go
+      # out. Publishing is one click in the releases UI.
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true
           files: |
             dist/*.tar.gz
             dist/*.tar.gz.sha256
-          generate_release_notes: true
+            dist/*.zip
+            dist/*.zip.sha256
           body: |
-            Установка:
+            ## Linux
 
             ```bash
-            tar -xzf sa05-${{ steps.version.outputs.value }}-linux-amd64.tar.gz
-            cd sa05-${{ steps.version.outputs.value }}-linux-amd64
+            tar -xzf sa05-${{ github.ref_name }}-linux-amd64.tar.gz
+            cd sa05-${{ github.ref_name }}-linux-amd64
             sudo ./install-linux.sh
             sa05
             ```
+
+            ## Windows
+
+            Распакуйте архив и запустите `sa05.exe`. Нужен Microsoft Edge WebView2
+            (в Windows 11 предустановлен). Ядро, системный прокси и Telegram работают;
+            режим TUN на Windows пока не реализован.
+
+            ---
 
             Клиент линкует tg-ws-proxy (GPLv3), поэтому распространяется под GPLv3;
             исходники — в этом репозитории.
