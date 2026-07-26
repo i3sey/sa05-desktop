@@ -125,6 +125,10 @@ func (s *Store) Load() (State, error) {
 
 // Save writes the state atomically: a temporary file in the same directory is renamed
 // over the target, so a crash never leaves a half-written subscription cache.
+//
+// The 0600 mode is what keeps subscription tokens away from other accounts on Unix. On
+// Windows the mode is not enforced by the filesystem; the file sits in the per-user
+// profile directory, whose ACL provides the same isolation.
 func (s *Store) Save(state State) error {
 	state.Schema = schemaValue
 	encoded, err := json.MarshalIndent(state, "", "  ")

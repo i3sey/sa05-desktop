@@ -3,6 +3,7 @@ package storage
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/fife/sa05-desktop/internal/core/subscription"
@@ -59,13 +60,17 @@ func TestSaveRoundTripsAndRestrictsPermissions(t *testing.T) {
 		t.Fatalf("состояние не совпало: %+v", loaded)
 	}
 
-	// The file holds subscription tokens, so it must not be world-readable.
-	info, err := os.Stat(store.Path())
-	if err != nil {
-		t.Fatalf("Stat: %v", err)
-	}
-	if mode := info.Mode().Perm(); mode != fileMode {
-		t.Fatalf("права файла = %o, ожидалось %o", mode, fileMode)
+	// The file holds subscription tokens, so it must not be world-readable. Windows has
+	// no POSIX mode — Chmod there only flips the read-only bit — and the file lives inside
+	// the per-user profile, whose ACL already excludes other accounts.
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(store.Path())
+		if err != nil {
+			t.Fatalf("Stat: %v", err)
+		}
+		if mode := info.Mode().Perm(); mode != fileMode {
+			t.Fatalf("права файла = %o, ожидалось %o", mode, fileMode)
+		}
 	}
 }
 
