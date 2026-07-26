@@ -32,6 +32,10 @@ var assets embed.FS
 //go:embed icon.png
 var windowIcon []byte
 
+// version is set at link time by the release workflow; a local build stays "dev", which
+// is what tells the updater there is nothing to compare against.
+var version = "dev"
+
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintf(os.Stderr, "ошибка: %v\n", err)
@@ -40,6 +44,8 @@ func main() {
 }
 
 func run() error {
+	app.Version = version
+
 	store, err := storage.Open("")
 	if err != nil {
 		return err
@@ -170,6 +176,16 @@ func (b *App) PingProfiles() ([]app.ProfileView, error) {
 // Toggle flips one of the switches.
 func (b *App) Toggle(name string, enabled bool) error {
 	return b.controller.Toggle(b.context(), name, enabled)
+}
+
+// CheckUpdate asks the release feed for a newer version.
+func (b *App) CheckUpdate() (app.UpdateView, error) {
+	return b.controller.CheckUpdate(b.context())
+}
+
+// InstallUpdate installs the update found by the last check.
+func (b *App) InstallUpdate() (app.UpdateView, error) {
+	return b.controller.InstallUpdate(b.context())
 }
 
 // Diagnose runs the connectivity checks and returns their verdict.

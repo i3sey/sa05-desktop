@@ -1,7 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte'
   import Switch from './Switch.svelte'
-  import { copyText, type View } from './api'
+  import { backend, copyText, errorText, type UpdateView, type View } from './api'
 
   interface Props {
     view: View
@@ -23,6 +23,36 @@
     { value: 'ws', label: 'Прямой WebSocket' },
     { value: 'tcp', label: 'Прямой TCP' },
   ]
+
+  let update = $state<UpdateView | null>(null)
+  let checking = $state(false)
+  let installing = $state(false)
+  let updateError = $state('')
+
+  async function checkUpdate() {
+    checking = true
+    updateError = ''
+    try {
+      update = await backend.CheckUpdate()
+      if (update.error) updateError = update.error
+    } catch (cause) {
+      updateError = errorText(cause)
+    } finally {
+      checking = false
+    }
+  }
+
+  async function installUpdate() {
+    installing = true
+    updateError = ''
+    try {
+      update = await backend.InstallUpdate()
+    } catch (cause) {
+      updateError = errorText(cause)
+    } finally {
+      installing = false
+    }
+  }
 
   const updated = $derived.by(() => {
     if (!view.subscription.updatedAt) return ''
@@ -71,6 +101,33 @@
       <p class="hint mono">{view.telegram.link}</p>
       <button onclick={() => copyText(view.telegram.link)}>Скопировать ссылку</button>
     {/if}
+  </div>
+
+  <div class="card status">
+    <h2>Обновления</h2>
+    {#if update?.installed}
+      <p class="desc">
+        Версия {update.available} установлена. Перезапустите клиент, чтобы она заработала.
+      </p>
+    {:else if update?.available}
+      <p class="desc">Доступна версия {update.available}</p>
+      {#if update.notes}<p class="hint">{update.notes.slice(0, 400)}</p>{/if}
+      <button class="primary" disabled={installing} onclick={installUpdate}>
+        {installing ? 'Устанавливаем…' : `Обновить до ${update.available}`}
+      </button>
+    {:else}
+      <p class="desc">
+        Версия {update?.current ?? '—'}{update ? ': обновлений нет' : ''}
+      </p>
+      <button disabled={checking} onclick={checkUpdate}>
+        {checking ? 'Проверяем…' : 'Проверить обновления'}
+      </button>
+    {/if}
+    {#if updateError}<p class="error">{updateError}</p>{/if}
+    <p class="hint">
+      Обновление скачивается с GitHub и проверяется подписью разработчика: архив без
+      подписи или с чужой подписью не устанавливается.
+    </p>
   </div>
 
   <div class="rows">

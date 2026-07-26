@@ -110,6 +110,15 @@ export interface DiagnosticsReport {
   throughTunnel: boolean
 }
 
+export interface UpdateView {
+  current: string
+  available: string
+  notes: string
+  installed: boolean
+  error: string
+  checking: boolean
+}
+
 export interface View {
   snapshot: Snapshot
   presentation: Presentation
@@ -130,6 +139,8 @@ interface Backend {
   PingProfiles(): Promise<ProfileView[]>
   Toggle(name: string, enabled: boolean): Promise<void>
   Diagnose(): Promise<DiagnosticsReport>
+  CheckUpdate(): Promise<UpdateView>
+  InstallUpdate(): Promise<UpdateView>
   TelegramLink(): Promise<string>
   SetTelegramTransport(value: string): Promise<void>
   OpenURL(url: string): Promise<void>
@@ -201,6 +212,17 @@ const mock: Backend = {
   PingProfiles: async () => [],
   Toggle: async () => {},
   Diagnose: async () => {
+    throw new Error('Браузерный режим: бэкенд недоступен')
+  },
+  CheckUpdate: async () => ({
+    current: 'dev',
+    available: '',
+    notes: '',
+    installed: false,
+    error: 'Браузерный режим',
+    checking: false,
+  }),
+  InstallUpdate: async () => {
     throw new Error('Браузерный режим: бэкенд недоступен')
   },
   TelegramLink: async () => 'tg://proxy?server=127.0.0.1&port=1443&secret=dd…',

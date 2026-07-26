@@ -28,6 +28,7 @@ import (
 	"github.com/fife/sa05-desktop/internal/storage"
 	"github.com/fife/sa05-desktop/internal/sysproxy"
 	"github.com/fife/sa05-desktop/internal/tgws"
+	"github.com/fife/sa05-desktop/internal/update"
 )
 
 const healthInterval = 5 * time.Second
@@ -94,11 +95,13 @@ type App struct {
 	mutex       sync.Mutex
 	latency     map[string]ping.Result
 	diagTargets []diag.Target
-	trafficStop context.CancelFunc
-	monitor     context.CancelFunc
-	rootCtx     context.Context
-	rootStop    context.CancelFunc
-	connectMu   sync.Mutex
+	// pendingUpdate is what the last check found, kept so installing does not re-check.
+	pendingUpdate *update.Available
+	trafficStop   context.CancelFunc
+	monitor       context.CancelFunc
+	rootCtx       context.Context
+	rootStop      context.CancelFunc
+	connectMu     sync.Mutex
 }
 
 // New wires the controller. assetDir holds geoip.dat / geosite.dat.

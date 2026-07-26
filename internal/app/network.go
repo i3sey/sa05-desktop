@@ -19,6 +19,7 @@ import (
 func (a *App) Start(ctx context.Context) {
 	a.watchNetwork(ctx)
 	a.autoConnect(ctx)
+	a.checkUpdateInBackground(ctx)
 }
 
 // autoConnect honours the "connect at startup" toggle. Without this the toggle was

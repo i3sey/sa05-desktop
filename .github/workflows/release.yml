@@ -96,6 +96,20 @@ jobs:
           ( cd dist && sha256sum "$name.tar.gz" > "$name.tar.gz.sha256" )
           ls -lh dist
 
+      # Every artifact is signed with the release key before it leaves the runner. The
+      # client refuses an update whose signature is missing or made by another key, so an
+      # unsigned release simply would not install.
+      - name: Подпись
+        env:
+          SA05_RELEASE_KEY: ${{ secrets.SA05_RELEASE_KEY }}
+        run: |
+          if [ -z "$SA05_RELEASE_KEY" ]; then
+            echo "SA05_RELEASE_KEY не задан: релиз без подписи не устанавливается клиентом" >&2
+            exit 1
+          fi
+          go run ./build/sign dist/*.tar.gz dist/*.AppImage
+          ls -l dist
+
       - uses: actions/upload-artifact@v4
         with:
           name: sa05-linux-amd64
@@ -171,6 +185,18 @@ jobs:
           ( cd dist && certutil -hashfile "$name.zip" SHA256 | sed -n 2p | tr -d ' \r' > "$name.zip.sha256" )
           ls -l dist
 
+      - name: Подпись
+        shell: bash
+        env:
+          SA05_RELEASE_KEY: ${{ secrets.SA05_RELEASE_KEY }}
+        run: |
+          if [ -z "$SA05_RELEASE_KEY" ]; then
+            echo "SA05_RELEASE_KEY не задан: релиз без подписи не устанавливается клиентом" >&2
+            exit 1
+          fi
+          go run ./build/sign dist/*.zip
+          ls -l dist
+
       - uses: actions/upload-artifact@v4
         with:
           name: sa05-windows-amd64
@@ -200,10 +226,13 @@ jobs:
           files: |
             dist/*.tar.gz
             dist/*.tar.gz.sha256
+            dist/*.tar.gz.sig
             dist/*.AppImage
             dist/*.AppImage.sha256
+            dist/*.AppImage.sig
             dist/*.zip
             dist/*.zip.sha256
+            dist/*.zip.sig
           body: |
             ## Linux
 
@@ -223,6 +252,14 @@ jobs:
             Распакуйте архив и запустите `sa05.exe`. Нужен Microsoft Edge WebView2
             (в Windows 11 предустановлен). Ядро, системный прокси и Telegram работают;
             режим TUN на Windows пока не реализован.
+
+            ---
+
+            ## Обновления
+
+            Клиент проверяет этот же список релизов и обновляется сам: архив
+            устанавливается только если его подпись `.sig` сделана ключом разработчика.
+            Установленный пакетным менеджером клиент обновляется через него.
 
             ---
 
