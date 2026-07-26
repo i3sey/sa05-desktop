@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func probeAgainst(t *testing.T, target Target, handler http.HandlerFunc) Result {
@@ -93,8 +94,26 @@ func TestUnreachableTargetReportsReadableError(t *testing.T) {
 	if result.OK() {
 		t.Fatal("недоступная цель отмечена рабочей")
 	}
-	if result.Error == "" || strings.Contains(result.Error, "dial tcp") {
+	// Platform wording differs — Linux says "connection refused", Windows says "connectex:
+	// ... actively refused it" — and neither belongs in front of a user.
+	if result.Error != "соединение отклонено" {
 		t.Fatalf("ошибка не переведена для пользователя: %q", result.Error)
+	}
+}
+
+func TestTimeoutIsReportedAsNoAnswer(t *testing.T) {
+	blocked := httptest.NewServer(http.HandlerFunc(
+		func(writer http.ResponseWriter, request *http.Request) {
+			<-request.Context().Done()
+		}))
+	defer blocked.Close()
+
+	runner := &Runner{Timeout: 300 * time.Millisecond}
+	result := runner.Probe(context.Background(), Target{
+		ID: "x", Label: "X", Group: GroupDPI, URL: blocked.URL,
+	})
+	if result.Error != "нет ответа за отведённое время" {
+		t.Fatalf("таймаут описан как %q", result.Error)
 	}
 }
 

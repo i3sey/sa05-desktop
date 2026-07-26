@@ -10,12 +10,16 @@ package diag
 
 import (
 	"context"
+	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
+	"syscall"
 	"time"
 
 	"golang.org/x/net/proxy"
@@ -301,22 +305,41 @@ func (r *Runner) client() (*http.Client, error) {
 }
 
 // transportError turns a Go network error into something a user can act on.
+//
+// The classification is by error value first and by text only as a fallback: the wording
+// differs between platforms — Windows reports a refused connection as "connectex: No
+// connection could be made because the target machine actively refused it" — and matching
+// on English prose alone would leak raw socket errors into the UI.
 func transportError(err error) string {
-	text := err.Error()
+	var dnsError *net.DNSError
+	var certificateError *tls.CertificateVerificationError
+	var recordError tls.RecordHeaderError
+
+	text := strings.ToLower(err.Error())
 	switch {
-	case strings.Contains(text, "context deadline exceeded"):
+	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, os.ErrDeadlineExceeded):
 		return "нет ответа за отведённое время"
-	case strings.Contains(text, "connection refused"):
-		return "соединение отклонено"
-	case strings.Contains(text, "connection reset"):
-		return "соединение сброшено (похоже на блокировку)"
-	case strings.Contains(text, "no such host"):
+	case errors.As(err, &dnsError):
 		return "имя не разрешилось"
-	case strings.Contains(text, "certificate"):
-		return "проблема с TLS-сертификатом (возможна подмена)"
-	default:
-		return text
+	case errors.As(err, &certificateError), errors.As(err, &recordError):
+		return "проблема с TLS (возможна подмена сертификата)"
+	case errors.Is(err, syscall.ECONNREFUSED), strings.Contains(text, "refused"):
+		return "соединение отклонено"
+	case errors.Is(err, syscall.ECONNRESET),
+		strings.Contains(text, "reset"),
+		strings.Contains(text, "forcibly closed"):
+		return "соединение сброшено (похоже на блокировку)"
+	case errors.Is(err, syscall.ECONNABORTED), strings.Contains(text, "aborted"):
+		return "соединение прервано"
+	case strings.Contains(text, "certificate"), strings.Contains(text, "tls"):
+		return "проблема с TLS (возможна подмена сертификата)"
 	}
+
+	var netError net.Error
+	if errors.As(err, &netError) && netError.Timeout() {
+		return "нет ответа за отведённое время"
+	}
+	return err.Error()
 }
 
 func milliseconds(elapsed time.Duration) int {
