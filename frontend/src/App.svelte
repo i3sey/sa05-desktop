@@ -4,7 +4,7 @@
   import Servers from './Servers.svelte'
   import Settings from './Settings.svelte'
   import Subscribe from './Subscribe.svelte'
-  import { backend, copyText, errorText, onSnapshot, type View } from './api'
+  import { backend, copyText, errorText, formatBytes, onSnapshot, type View } from './api'
 
   type Screen = 'main' | 'servers' | 'settings'
 
@@ -204,7 +204,14 @@
         <div class="meta">
           {#if uptime}<span>{uptime}</span>{/if}
           {#if view.snapshot.latencyMs > 0}<span>{view.snapshot.latencyMs} мс</span>{/if}
-          <span class="mono">SOCKS {view.snapshot.socksPort}</span>
+          <span title="Скорость сейчас">
+            ↓ {formatBytes(view.snapshot.rateDown)}/с · ↑ {formatBytes(view.snapshot.rateUp)}/с
+          </span>
+        </div>
+        <div class="meta">
+          <span title="За сессию">
+            всего ↓ {formatBytes(view.snapshot.trafficDown)} · ↑ {formatBytes(view.snapshot.trafficUp)}
+          </span>
         </div>
       {/if}
 

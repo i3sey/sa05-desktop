@@ -262,6 +262,86 @@ func ApplyOutboundMark(raw string, mark int) (string, error) {
 	return encode(root)
 }
 
+// TrafficTags lists the tags whose counters carry the traffic totals.
+type TrafficTags struct {
+	Inbound  []string
+	Outbound []string
+}
+
+// EnableTrafficStats turns on Xray's own counters and returns the tags they live under.
+//
+// The client reads these instead of measuring bytes itself: the core already counts what
+// actually crossed the tunnel, while a wrapper around the SOCKS inbound would miss
+// everything the routing sent elsewhere. Provider-supplied policy values are preserved.
+func EnableTrafficStats(raw string) (string, TrafficTags, error) {
+	root, err := parse(raw)
+	if err != nil {
+		return "", TrafficTags{}, err
+	}
+	if _, exists := root["stats"]; !exists {
+		root["stats"] = map[string]any{}
+	}
+
+	policy, _ := root["policy"].(map[string]any)
+	if policy == nil {
+		policy = map[string]any{}
+		root["policy"] = policy
+	}
+	system, _ := policy["system"].(map[string]any)
+	if system == nil {
+		system = map[string]any{}
+		policy["system"] = system
+	}
+	// Both sides are enabled: the outbound counters miss reads that the core serves with
+	// readv straight off the socket, while the inbound ones see everything the user's
+	// applications actually sent and received.
+	for _, key := range []string{
+		"statsOutboundUplink", "statsOutboundDownlink",
+		"statsInboundUplink", "statsInboundDownlink",
+	} {
+		if _, exists := system[key]; !exists {
+			system[key] = true
+		}
+	}
+
+	tags := TrafficTags{}
+	inbounds, _ := root["inbounds"].([]any)
+	for index, entry := range inbounds {
+		inbound, ok := entry.(map[string]any)
+		if !ok {
+			continue
+		}
+		tag := strings.TrimSpace(str(inbound["tag"]))
+		if tag == "" {
+			tag = fmt.Sprintf("__sa05_inbound_%d", index)
+			inbound["tag"] = tag
+		}
+		tags.Inbound = append(tags.Inbound, tag)
+	}
+
+	outbounds, _ := root["outbounds"].([]any)
+	for index, entry := range outbounds {
+		outbound, ok := entry.(map[string]any)
+		if !ok {
+			continue
+		}
+		tag := strings.TrimSpace(str(outbound["tag"]))
+		if tag == "" {
+			// An untagged outbound gets no counter; naming it is the only way to see its
+			// traffic, and Xray tolerates the added tag.
+			tag = fmt.Sprintf("__sa05_outbound_%d", index)
+			outbound["tag"] = tag
+		}
+		tags.Outbound = append(tags.Outbound, tag)
+	}
+
+	encoded, err := encode(root)
+	if err != nil {
+		return "", TrafficTags{}, err
+	}
+	return encoded, tags, nil
+}
+
 // UsesGeoAssets reports whether a config references the geoip/geosite databases. Xray
 // refuses to start when a referenced database is missing, so this decides whether the
 // ~30 MB downloads are required at all.

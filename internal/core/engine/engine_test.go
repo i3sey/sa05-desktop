@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -148,4 +149,68 @@ func mustURL(t *testing.T, raw string) *url.URL {
 		t.Fatalf("URL %q: %v", raw, err)
 	}
 	return parsed
+}
+
+// TestTrafficCountsWhatCrossedTheTunnel is the check that the counters are actually wired:
+// a request through the SOCKS inbound must show up as bytes on the outbound.
+func TestTrafficCountsWhatCrossedTheTunnel(t *testing.T) {
+	payload := strings.Repeat("sa05", 4096)
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(writer, payload)
+	}))
+	defer server.Close()
+
+	core := New(t.TempDir())
+	core.Ephemeral = true
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	ports, err := core.Start(ctx, loopbackProfile(0))
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer core.Stop()
+
+	if before := core.Traffic(); before.Downlink != 0 || before.Uplink != 0 {
+		t.Fatalf("счётчики не с нуля: %+v", before)
+	}
+
+	dialer, err := proxy.SOCKS5("tcp", fmt.Sprintf("127.0.0.1:%d", ports.Socks), nil, proxy.Direct)
+	if err != nil {
+		t.Fatalf("SOCKS-клиент: %v", err)
+	}
+	client := &http.Client{
+		Timeout:   10 * time.Second,
+		Transport: &http.Transport{DialContext: dialer.(proxy.ContextDialer).DialContext},
+	}
+	response, err := client.Get(server.URL)
+	if err != nil {
+		t.Fatalf("запрос: %v", err)
+	}
+	io.Copy(io.Discard, response.Body)
+	response.Body.Close()
+
+	// Both directions must register. The exact totals are deliberately not asserted: when
+	// the outbound is a plain TCP socket — as freedom over loopback is here — the core
+	// serves the bulk copy with splice/readv straight off the socket, which bypasses the
+	// counting wrappers. Real profiles proxy through VLESS/XHTTP, where every byte passes
+	// through the core and is counted.
+	traffic := Traffic{}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		traffic = core.Traffic()
+		if traffic.Uplink > 0 && traffic.Downlink > 0 {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if traffic.Uplink <= 0 || traffic.Downlink <= 0 {
+		t.Fatalf("счётчики не считают: %+v", traffic)
+	}
+
+	// A stopped core has no counters left to read.
+	core.Stop()
+	if after := core.Traffic(); after.Uplink != 0 || after.Downlink != 0 {
+		t.Fatalf("счётчики пережили остановку: %+v", after)
+	}
 }

@@ -66,21 +66,26 @@ type ComponentSnapshot struct {
 
 // Snapshot is the full runtime state handed to the UI.
 type Snapshot struct {
-	Status          RunStatus           `json:"status"`
-	ProfileID       string              `json:"profileId"`
-	ProfileName     string              `json:"profileName"`
-	Message         string              `json:"message"`
-	FailureKind     FailureKind         `json:"failureKind"`
-	SocksPort       int                 `json:"socksPort"`
-	HTTPPort        int                 `json:"httpPort"`
-	NetworkKey      string              `json:"networkKey"`
-	ConnectedAt     int64               `json:"connectedAt"`
-	RecoveryAttempt int                 `json:"recoveryAttempt"`
-	SystemProxyOn   bool                `json:"systemProxyOn"`
-	TunOn           bool                `json:"tunOn"`
-	TelegramOn      bool                `json:"telegramOn"`
-	LatencyMS       int                 `json:"latencyMs"`
-	Components      []ComponentSnapshot `json:"components"`
+	Status          RunStatus   `json:"status"`
+	ProfileID       string      `json:"profileId"`
+	ProfileName     string      `json:"profileName"`
+	Message         string      `json:"message"`
+	FailureKind     FailureKind `json:"failureKind"`
+	SocksPort       int         `json:"socksPort"`
+	HTTPPort        int         `json:"httpPort"`
+	NetworkKey      string      `json:"networkKey"`
+	ConnectedAt     int64       `json:"connectedAt"`
+	RecoveryAttempt int         `json:"recoveryAttempt"`
+	SystemProxyOn   bool        `json:"systemProxyOn"`
+	TunOn           bool        `json:"tunOn"`
+	TelegramOn      bool        `json:"telegramOn"`
+	LatencyMS       int         `json:"latencyMs"`
+	// Traffic totals since the current connection started, and the last measured rate.
+	TrafficUp   int64               `json:"trafficUp"`
+	TrafficDown int64               `json:"trafficDown"`
+	RateUp      int64               `json:"rateUp"`
+	RateDown    int64               `json:"rateDown"`
+	Components  []ComponentSnapshot `json:"components"`
 }
 
 // Requested reports whether the user currently wants the tunnel up.

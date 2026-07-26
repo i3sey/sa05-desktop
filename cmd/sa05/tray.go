@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"runtime"
 
@@ -97,7 +98,12 @@ func (t *tray) render(snapshot state.Snapshot) {
 	}
 	presentation := state.Present(snapshot)
 	t.status.SetTitle(presentation.Title)
-	systray.SetTooltip("SA05 — " + presentation.Description)
+	tooltip := "SA05 — " + presentation.Description
+	if snapshot.Status == state.StatusConnected {
+		tooltip += fmt.Sprintf("\n↓ %s/с  ↑ %s/с",
+			humanBytes(snapshot.RateDown), humanBytes(snapshot.RateUp))
+	}
+	systray.SetTooltip(tooltip)
 
 	switch snapshot.Status {
 	case state.StatusConnected:
@@ -113,6 +119,24 @@ func (t *tray) render(snapshot state.Snapshot) {
 		t.setIcon(trayicon.StateIdle)
 		t.connect.SetTitle("Подключить")
 	}
+}
+
+// humanBytes renders a byte count for the tooltip, matching what the window shows.
+func humanBytes(value int64) string {
+	if value < 1024 {
+		return fmt.Sprintf("%d Б", value)
+	}
+	units := []string{"КБ", "МБ", "ГБ", "ТБ"}
+	amount := float64(value) / 1024
+	index := 0
+	for amount >= 1024 && index < len(units)-1 {
+		amount /= 1024
+		index++
+	}
+	if amount < 10 {
+		return fmt.Sprintf("%.1f %s", amount, units[index])
+	}
+	return fmt.Sprintf("%.0f %s", amount, units[index])
 }
 
 func (t *tray) setIcon(iconState trayicon.State) {

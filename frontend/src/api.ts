@@ -31,6 +31,10 @@ export interface Snapshot {
   tunOn: boolean
   telegramOn: boolean
   latencyMs: number
+  trafficUp: number
+  trafficDown: number
+  rateUp: number
+  rateDown: number
   components: ComponentSnapshot[] | null
 }
 
@@ -48,6 +52,10 @@ export interface ProfileView {
   remarks: string
   active: boolean
   latencyMs: number
+  trafficUp: number
+  trafficDown: number
+  rateUp: number
+  rateDown: number
   error: string
 }
 
@@ -128,6 +136,10 @@ const mockView: View = {
     tunOn: false,
     telegramOn: false,
     latencyMs: 0,
+    trafficUp: 0,
+    trafficDown: 0,
+    rateUp: 0,
+    rateDown: 0,
     components: [],
   },
   presentation: {
@@ -187,6 +199,19 @@ export async function copyText(text: string): Promise<void> {
     return
   }
   await navigator.clipboard.writeText(text)
+}
+
+/** formatBytes renders a byte count the way a user reads it, not the way it is stored. */
+export function formatBytes(value: number): string {
+  if (value < 1024) return `${value} Б`
+  const units = ['КБ', 'МБ', 'ГБ', 'ТБ']
+  let amount = value / 1024
+  let index = 0
+  while (amount >= 1024 && index < units.length - 1) {
+    amount /= 1024
+    index++
+  }
+  return `${amount < 10 ? amount.toFixed(1) : Math.round(amount)} ${units[index]}`
 }
 
 /** errorText unwraps whatever Wails rejected a promise with into a readable string. */

@@ -90,12 +90,13 @@ type App struct {
 	// real 1443 on a developer's machine.
 	telegramPort int
 
-	mutex     sync.Mutex
-	latency   map[string]ping.Result
-	monitor   context.CancelFunc
-	rootCtx   context.Context
-	rootStop  context.CancelFunc
-	connectMu sync.Mutex
+	mutex       sync.Mutex
+	latency     map[string]ping.Result
+	trafficStop context.CancelFunc
+	monitor     context.CancelFunc
+	rootCtx     context.Context
+	rootStop    context.CancelFunc
+	connectMu   sync.Mutex
 }
 
 // New wires the controller. assetDir holds geoip.dat / geosite.dat.
@@ -161,6 +162,7 @@ func (a *App) Shutdown() {
 	}
 	a.telegram.Stop()
 	a.helper.Close()
+	a.stopTrafficMeter()
 	a.stopMonitor()
 	a.core.Stop()
 	a.rootStop()
@@ -302,6 +304,7 @@ func (a *App) Connect(ctx context.Context) error {
 		}
 	})
 	a.startMonitor()
+	a.startTrafficMeter(a.rootCtx)
 	a.notifier.Send(notify.KindInfo, "SA05", "Подключено: "+name)
 	return nil
 }
@@ -318,6 +321,7 @@ func (a *App) Disconnect() {
 	a.connectMu.Lock()
 	defer a.connectMu.Unlock()
 	a.stopMonitor()
+	a.stopTrafficMeter()
 	a.core.Stop()
 	// Telegram is independent of the tunnel, so its state survives a disconnect.
 	a.states.Update(func(next *state.Snapshot) {
