@@ -1,0 +1,64 @@
+# Maintainer: SA05
+pkgname=sa05-desktop
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Клиент SA05: Xray, системный прокси, TUN и Telegram"
+arch=('x86_64')
+url="https://github.com/i3sey/sa05-desktop"
+license=('GPL3')
+depends=('webkit2gtk-4.1' 'gtk3')
+makedepends=('go' 'nodejs' 'npm' 'git' 'curl')
+# The geo databases are data, not code: they change weekly and are fetched at build time.
+options=('!strip' '!debug')
+source=("git+$url.git#tag=v$pkgver")
+sha256sums=('SKIP')
+install=sa05-desktop.install
+
+prepare() {
+  cd "$srcdir/$pkgname"
+  # Xray-core is vendored and patched here rather than pinned in go.mod: the Beeline
+  # short-session-ID patch has to be verified against the exact tree being built.
+  build/vendor-xray.sh
+  cd frontend && npm ci
+}
+
+build() {
+  cd "$srcdir/$pkgname"
+  export CGO_ENABLED=1
+  export GOFLAGS="-buildmode=pie -trimpath -mod=readonly -modcacherw"
+  (cd frontend && npm run build)
+  go build -tags "desktop,production,webkit2_41" \
+    -ldflags "-w -s -X main.version=$pkgver" -o build/out/sa05 ./cmd/sa05
+  go build -ldflags "-w -s -X main.version=$pkgver" -o build/out/sa05ctl ./cmd/sa05ctl
+  go build -ldflags "-w -s -X main.version=$pkgver" -o build/out/sa05-helper ./cmd/sa05-helper
+  build/fetch-geoassets.sh build/out/assets
+}
+
+package() {
+  cd "$srcdir/$pkgname"
+
+  install -Dm755 build/out/sa05 "$pkgdir/usr/bin/sa05"
+  install -Dm755 build/out/sa05ctl "$pkgdir/usr/bin/sa05ctl"
+  # The helper is not on PATH: it is started by systemd, never by hand.
+  install -Dm755 build/out/sa05-helper "$pkgdir/usr/lib/sa05/sa05-helper"
+
+  install -Dm644 build/out/assets/geoip.dat "$pkgdir/usr/share/sa05/geoip.dat"
+  install -Dm644 build/out/assets/geosite.dat "$pkgdir/usr/share/sa05/geosite.dat"
+
+  install -Dm644 packaging/sa05.desktop "$pkgdir/usr/share/applications/sa05.desktop"
+  for size in 16 24 32 48 64 128 256; do
+    install -Dm644 "packaging/icons/sa05-$size.png" \
+      "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/sa05.png"
+  done
+
+  install -Dm644 packaging/systemd/sa05-helper.service \
+    "$pkgdir/usr/lib/systemd/system/sa05-helper.service"
+  # The packaged unit runs the binary from /usr/lib, not /usr/local/lib.
+  sed -i 's|/usr/local/lib/sa05/sa05-helper|/usr/lib/sa05/sa05-helper|' \
+    "$pkgdir/usr/lib/systemd/system/sa05-helper.service"
+
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 THIRD_PARTY_NOTICES.md \
+    "$pkgdir/usr/share/licenses/$pkgname/THIRD_PARTY_NOTICES.md"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}

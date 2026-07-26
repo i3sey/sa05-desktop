@@ -34,9 +34,24 @@ uninstall() {
   echo ">> Останавливаю службу"
   systemctl disable --now sa05-helper.service 2>/dev/null || true
   rm -f "$UNIT" "$BINDIR/sa05" "$BINDIR/sa05ctl"
+  rm -f "$PREFIX/share/applications/sa05.desktop"
+  for size in 16 24 32 48 64 128 256; do
+    rm -f "$PREFIX/share/icons/hicolor/${size}x${size}/apps/sa05.png"
+  done
   rm -rf "$LIBDIR"
   systemctl daemon-reload
+  refresh_desktop_caches
   echo ">> Удалено. Каталог $SHAREDIR с гео-базами оставлен."
+}
+
+# refresh_desktop_caches makes the menu entry and the icon appear without a re-login.
+refresh_desktop_caches() {
+  if command -v update-desktop-database >/dev/null; then
+    update-desktop-database "$PREFIX/share/applications" 2>/dev/null || true
+  fi
+  if command -v gtk-update-icon-cache >/dev/null; then
+    gtk-update-icon-cache -f -t "$PREFIX/share/icons/hicolor" 2>/dev/null || true
+  fi
 }
 
 if [ "${1:-}" = "--uninstall" ]; then
@@ -63,6 +78,17 @@ if [ -f "$OUT/assets/geoip.dat" ]; then
 else
   echo ">> Гео-базы не найдены: запустите build/fetch-geoassets.sh (нужны профилям с geosite:)"
 fi
+
+echo ">> Устанавливаю иконки и пункт меню"
+for size in 16 24 32 48 64 128 256; do
+  icon="$ROOT/packaging/icons/sa05-$size.png"
+  [ -f "$icon" ] || continue
+  install -d "$PREFIX/share/icons/hicolor/${size}x${size}/apps"
+  install -m 0644 "$icon" "$PREFIX/share/icons/hicolor/${size}x${size}/apps/sa05.png"
+done
+install -d "$PREFIX/share/applications"
+install -m 0644 "$ROOT/packaging/sa05.desktop" "$PREFIX/share/applications/sa05.desktop"
+refresh_desktop_caches
 
 echo ">> Устанавливаю службу"
 install -m 0644 "$ROOT/packaging/systemd/sa05-helper.service" "$UNIT"

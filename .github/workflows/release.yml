@@ -73,6 +73,17 @@ jobs:
       - name: Гео-базы
         run: build/fetch-geoassets.sh build/out/assets
 
+      # An AppImage covers distributions without a native package: it carries the GUI, the
+      # CLI and the geo databases, and needs nothing installed but WebKitGTK.
+      - name: AppImage
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          build/make-appimage.sh "$VERSION"
+          mkdir -p dist
+          cp build/appimage/*.AppImage dist/
+          ( cd dist && sha256sum *.AppImage > "$(ls *.AppImage).sha256" )
+
       - name: Пакет
         env:
           VERSION: ${{ steps.version.outputs.value }}
@@ -88,7 +99,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: sa05-linux-amd64
-          path: dist/*.tar.gz*
+          path: |
+            dist/*.tar.gz*
+            dist/*.AppImage*
           retention-days: 14
 
   windows:
@@ -187,6 +200,8 @@ jobs:
           files: |
             dist/*.tar.gz
             dist/*.tar.gz.sha256
+            dist/*.AppImage
+            dist/*.AppImage.sha256
             dist/*.zip
             dist/*.zip.sha256
           body: |
@@ -198,6 +213,10 @@ jobs:
             sudo ./install-linux.sh
             sa05
             ```
+
+            Без установки: скачайте `SA05-*.AppImage`, `chmod +x`, запустите. В нём нет
+            системного компонента, поэтому режим TUN недоступен — работают ядро,
+            системный прокси и Telegram.
 
             ## Windows
 

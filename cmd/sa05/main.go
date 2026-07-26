@@ -26,6 +26,12 @@ import (
 //go:embed all:dist
 var assets embed.FS
 
+// The window icon is the product logo; the tray keeps its own state glyph, because a
+// 512-px logo scaled to a 22-px panel is an unreadable smudge.
+//
+//go:embed icon.png
+var windowIcon []byte
+
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintf(os.Stderr, "ошибка: %v\n", err)
@@ -68,10 +74,13 @@ func run() error {
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		OnStartup:        binding.startup,
-		OnShutdown:       binding.shutdown,
-		Bind:             []any{binding},
-		Linux:            &linux.Options{ProgramName: "sa05"},
+		OnStartup:  binding.startup,
+		OnShutdown: binding.shutdown,
+		Bind:       []any{binding},
+		Linux: &linux.Options{
+			ProgramName: "sa05",
+			Icon:        windowIcon,
+		},
 		BackgroundColour: &options.RGBA{R: 250, G: 248, B: 242, A: 1},
 	})
 }

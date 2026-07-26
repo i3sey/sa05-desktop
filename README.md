@@ -55,12 +55,18 @@ go build -tags "desktop,production,webkit2_41" -o build/out/sa05 ./cmd/sa05
 
 ## Установка
 
+Готовые сборки — в разделе Releases: `.tar.gz` с установщиком, `.AppImage` без установки
+и `.zip` для Windows. Сборка из исходников:
+
 ```bash
 build/fetch-geoassets.sh build/out/assets   # geoip.dat / geosite.dat (нужны профилям с geosite:)
 sudo build/install-linux.sh                 # клиент + системный компонент (systemd)
 sa05                                        # запуск
 sudo build/install-linux.sh --uninstall
 ```
+
+Установщик кладёт бинарники, иконки `hicolor`, пункт меню и юнит systemd. Для дистрибутивов
+без пакета есть `build/make-appimage.sh`, для Arch — `packaging/aur/PKGBUILD`.
 
 Системный компонент `sa05-helper` — единственная часть, работающая от root: он создаёт
 TUN-устройство и правит маршрутизацию. GUI работает от пользователя и общается с ним через

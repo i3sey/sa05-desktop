@@ -1,0 +1,22 @@
+post_install() {
+  cat <<'EOF'
+Клиент установлен. Запуск: sa05
+
+Режим TUN требует системного компонента:
+  sudo systemctl enable --now sa05-helper.service
+
+Без него работают ядро, системный прокси и Telegram.
+EOF
+}
+
+post_upgrade() {
+  # The helper and the GUI speak a versioned IPC protocol and refuse to talk across
+  # versions, so a running old helper has to be restarted with the new binary.
+  if systemctl is-active --quiet sa05-helper.service; then
+    systemctl restart sa05-helper.service
+  fi
+}
+
+pre_remove() {
+  systemctl disable --now sa05-helper.service 2>/dev/null || true
+}

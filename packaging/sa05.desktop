@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=SA05
+GenericName=VPN-клиент
+Comment=Xray, системный прокси, TUN и Telegram
+Exec=sa05 %u
+Icon=sa05
+Terminal=false
+Categories=Network;Security;
+Keywords=vpn;proxy;xray;telegram;socks;
+StartupNotify=true
+StartupWMClass=sa05
+# The client registers itself as the handler for its own subscription links, so
+# sa05://add/<url> opens the running window instead of a browser error page.
+MimeType=x-scheme-handler/sa05;
