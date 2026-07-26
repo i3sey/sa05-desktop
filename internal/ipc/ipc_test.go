@@ -3,7 +3,6 @@ package ipc
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -45,7 +44,7 @@ func (f *fakeHandler) TunDown(context.Context) (Status, error) {
 
 func startServer(t *testing.T, handler Handler, authorize Authorizer) *Client {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "helper.sock")
+	path := Endpoint(t.TempDir(), "helper.sock")
 	listener, err := Listen(path)
 	if err != nil {
 		t.Fatalf("Listen: %v", err)
@@ -156,7 +155,7 @@ func TestRequestValidation(t *testing.T) {
 }
 
 func TestClientReportsMissingHelper(t *testing.T) {
-	client := NewClient(filepath.Join(t.TempDir(), "absent.sock"))
+	client := NewClient(Endpoint(t.TempDir(), "absent.sock"))
 	defer client.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -170,7 +169,7 @@ func TestClientReportsMissingHelper(t *testing.T) {
 }
 
 func TestClientReconnectsAfterHelperRestart(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "helper.sock")
+	path := Endpoint(t.TempDir(), "helper.sock")
 	handler := &fakeHandler{}
 	client := NewClient(path)
 	defer client.Close()

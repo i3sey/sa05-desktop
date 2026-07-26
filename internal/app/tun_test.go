@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"sync"
 	"testing"
 
@@ -61,7 +60,7 @@ func (f *fakeHelper) calls() ([]ipc.TunUp, int) {
 
 func attachHelper(t *testing.T, application *App, handler ipc.Handler) {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "helper.sock")
+	path := ipc.Endpoint(t.TempDir(), "helper.sock")
 	listener, err := ipc.Listen(path)
 	if err != nil {
 		t.Fatalf("ipc.Listen: %v", err)

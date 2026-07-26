@@ -39,7 +39,9 @@ func TestMeasureReturnsLatency(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Measure: %v", err)
 	}
-	if latency <= 0 || latency > 10*time.Second {
+	// A loopback answer can be faster than the platform clock's tick, so zero is a valid
+	// measurement here; what matters is that it is bounded and reported.
+	if latency < 0 || latency > 10*time.Second {
 		t.Fatalf("задержка = %s", latency)
 	}
 }
@@ -64,6 +66,10 @@ func TestMeasureUsesEphemeralPorts(t *testing.T) {
 	for index, result := range results {
 		if !result.OK() {
 			t.Fatalf("профиль %s: %s", result.ProfileID, result.Error)
+		}
+		// Callers treat zero as "not measured", so a successful probe must never report it.
+		if result.LatencyMS < 1 {
+			t.Fatalf("профиль %s измерен как %d мс", result.ProfileID, result.LatencyMS)
 		}
 		if result.ProfileID != profiles[index].ID {
 			t.Fatalf("порядок результатов нарушен: %+v", results)
