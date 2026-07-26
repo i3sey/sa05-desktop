@@ -22,8 +22,11 @@ import (
 
 	"github.com/fife/sa05-desktop/internal/assets"
 	"github.com/fife/sa05-desktop/internal/core/engine"
+	"github.com/fife/sa05-desktop/internal/core/ping"
 	"github.com/fife/sa05-desktop/internal/core/subscription"
 	"github.com/fife/sa05-desktop/internal/core/xrayconf"
+	"github.com/fife/sa05-desktop/internal/ipc"
+	"github.com/fife/sa05-desktop/internal/netbypass"
 	"github.com/fife/sa05-desktop/internal/storage"
 	"github.com/fife/sa05-desktop/internal/tgws"
 )
@@ -37,7 +40,10 @@ const usage = `sa05ctl — отладочный клиент ядра SA05
                                поднять ядро и держать до Ctrl-C
   sa05ctl status               показать сохранённое состояние
   sa05ctl check <порт> [url]   запрос через SOCKS-порт ядра
+  sa05ctl ping                 замерить задержку всех профилей
   sa05ctl tg-link              ссылка для настройки Telegram
+  sa05ctl tg-run [транспорт]   поднять Telegram-прокси до Ctrl-C (auto|cf|ws|tcp)
+  sa05ctl tun <status|up|down> управление туннелем через системный компонент
 `
 
 func main() {
@@ -72,8 +78,14 @@ func run(command string, args []string) error {
 		return status(store)
 	case "check":
 		return check(ctx, args)
+	case "ping":
+		return pingProfiles(ctx, store)
 	case "tg-link":
 		return telegramLink(store)
+	case "tg-run":
+		return telegramRun(ctx, store, args)
+	case "tun":
+		return tunCommand(ctx, args)
 	default:
 		fmt.Fprint(os.Stderr, usage)
 		return fmt.Errorf("неизвестная команда %q", command)
@@ -330,6 +342,143 @@ func parseUpArgs(args []string) (selector string, socksPort, httpPort int, err e
 		}
 	}
 	return selector, socksPort, httpPort, nil
+}
+
+// pingProfiles measures every profile the way the servers screen does.
+func pingProfiles(ctx context.Context, store *storage.Store) error {
+	state, err := store.Load()
+	if err != nil {
+		return err
+	}
+	if len(state.Subscription.Profiles) == 0 {
+		return errors.New("подписка не импортирована")
+	}
+	assetDir, err := storage.DefaultAssetDir()
+	if err != nil {
+		return err
+	}
+	measurer := &ping.Measurer{AssetDir: assetDir}
+	results := measurer.MeasureAll(ctx, state.Subscription.Profiles)
+	for index, result := range results {
+		profile := state.Subscription.Profiles[index]
+		name := subscription.ParseServerRemark(profile.Remarks).Name
+		if result.OK() {
+			fmt.Printf("%-28s %5d мс\n", name, result.LatencyMS)
+			continue
+		}
+		fmt.Printf("%-28s %s\n", name, result.Error)
+	}
+	return nil
+}
+
+// telegramRun brings up the MTProto proxy in the foreground, for verifying a transport
+// against a real Telegram client.
+func telegramRun(ctx context.Context, store *storage.Store, args []string) error {
+	state, err := store.Load()
+	if err != nil {
+		return err
+	}
+	secret, err := tgws.EnsureSecret(state.Telegram.Secret)
+	if err != nil {
+		return err
+	}
+	if secret != state.Telegram.Secret {
+		if _, err := store.Update(func(target *storage.State) {
+			target.Telegram.Secret = secret
+		}); err != nil {
+			return err
+		}
+	}
+	transport := tgws.ParseTransport(state.Telegram.Transport)
+	if len(args) == 1 {
+		transport = tgws.ParseTransport(args[0])
+	}
+	cacheDir, err := storage.DefaultCacheDir()
+	if err != nil {
+		return err
+	}
+
+	proxy := &tgws.Proxy{}
+	if err := proxy.Start(ctx, tgws.Settings{
+		Secret:           secret,
+		Transport:        transport,
+		CloudflareDomain: state.Telegram.CloudflareDomain,
+		CacheDir:         cacheDir,
+		Dial:             netbypass.Dialer(),
+	}); err != nil {
+		return err
+	}
+	defer proxy.Stop()
+
+	link, err := tgws.ProxyURI(secret, false)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Транспорт: %s\n", transport.Title())
+	fmt.Printf("Порт:      127.0.0.1:%d\n", proxy.Port())
+	fmt.Printf("Ссылка:    %s\n", link)
+	fmt.Println("Ctrl-C — остановить")
+	<-ctx.Done()
+	fmt.Println("\n" + tgws.Summary())
+	return nil
+}
+
+// tunCommand talks to the privileged helper, so the tunnel can be verified without the GUI.
+func tunCommand(ctx context.Context, args []string) error {
+	if len(args) < 1 {
+		return errors.New("нужна команда: status, up или down")
+	}
+	client := ipc.NewClient("")
+	defer client.Close()
+
+	switch args[0] {
+	case "status":
+		status, err := client.Status(ctx)
+		if err != nil {
+			return err
+		}
+		printTunStatus(status)
+		return nil
+	case "down":
+		status, err := client.TunDown(ctx)
+		if err != nil {
+			return err
+		}
+		printTunStatus(status)
+		return nil
+	case "up":
+		if len(args) != 2 {
+			return errors.New("нужен порт SOCKS: sa05ctl tun up <порт>")
+		}
+		port, err := strconv.Atoi(args[1])
+		if err != nil {
+			return fmt.Errorf("некорректный порт %q", args[1])
+		}
+		status, err := client.TunUp(ctx, ipc.TunUp{
+			SocksPort:  port,
+			DNS:        "1.1.1.1",
+			KillSwitch: true,
+			BypassMark: netbypass.Mark,
+		})
+		if err != nil {
+			return err
+		}
+		printTunStatus(status)
+		return nil
+	default:
+		return fmt.Errorf("неизвестная команда %q", args[0])
+	}
+}
+
+func printTunStatus(status ipc.Status) {
+	fmt.Printf("Протокол:  %d\n", status.Version)
+	fmt.Printf("Туннель:   %v\n", status.TunUp)
+	if status.Interface != "" {
+		fmt.Printf("Интерфейс: %s -> 127.0.0.1:%d\n", status.Interface, status.SocksPort)
+	}
+	if status.Message != "" {
+		fmt.Printf("Сообщение: %s\n", status.Message)
+	}
 }
 
 func resolveProfile(state subscription.State, selector string) (*subscription.Profile, error) {

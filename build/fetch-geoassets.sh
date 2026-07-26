@@ -11,8 +11,8 @@ set -euo pipefail
 
 # Pin the release, not "latest": a build must be reproducible, and a surprise rule change
 # can break a working profile.
-GEOIP_RELEASE="${GEOIP_RELEASE:-202601130082}"
-GEOSITE_RELEASE="${GEOSITE_RELEASE:-20260113073507}"
+GEOIP_RELEASE="${GEOIP_RELEASE:-202607171233}"
+GEOSITE_RELEASE="${GEOSITE_RELEASE:-20260726062913}"
 GEOIP_URL="${GEOIP_URL:-https://github.com/v2fly/geoip/releases/download/$GEOIP_RELEASE/geoip.dat}"
 GEOSITE_URL="${GEOSITE_URL:-https://github.com/v2fly/domain-list-community/releases/download/$GEOSITE_RELEASE/dlc.dat}"
 
@@ -22,7 +22,9 @@ TARGET="${1:-$ROOT/build/out/assets}"
 mkdir -p "$TARGET"
 
 fetch() {
-  local url="$1" name="$2" destination="$TARGET/$name"
+  local url="$1"
+  local name="$2"
+  local destination="$TARGET/$name"
   local work
   work="$(mktemp -d)"
   trap 'rm -rf "$work"' RETURN
