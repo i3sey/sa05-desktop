@@ -172,6 +172,11 @@ func (b *App) Toggle(name string, enabled bool) error {
 	return b.controller.Toggle(b.context(), name, enabled)
 }
 
+// Diagnose runs the connectivity checks and returns their verdict.
+func (b *App) Diagnose() (app.DiagnosticsReport, error) {
+	return b.controller.Diagnose(b.context())
+}
+
 // TelegramLink returns the tg:// link for the built-in MTProto proxy.
 func (b *App) TelegramLink() (string, error) { return b.controller.TelegramLink() }
 

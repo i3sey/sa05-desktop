@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/fife/sa05-desktop/internal/assets"
+	"github.com/fife/sa05-desktop/internal/core/diag"
 	"github.com/fife/sa05-desktop/internal/core/engine"
 	"github.com/fife/sa05-desktop/internal/core/ping"
 	"github.com/fife/sa05-desktop/internal/core/recovery"
@@ -92,6 +93,7 @@ type App struct {
 
 	mutex       sync.Mutex
 	latency     map[string]ping.Result
+	diagTargets []diag.Target
 	trafficStop context.CancelFunc
 	monitor     context.CancelFunc
 	rootCtx     context.Context

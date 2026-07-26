@@ -4,9 +4,10 @@
   import Servers from './Servers.svelte'
   import Settings from './Settings.svelte'
   import Subscribe from './Subscribe.svelte'
+  import Diagnostics from './Diagnostics.svelte'
   import { backend, copyText, errorText, formatBytes, onSnapshot, type View } from './api'
 
-  type Screen = 'main' | 'servers' | 'settings'
+  type Screen = 'main' | 'servers' | 'settings' | 'diagnostics'
 
   let view = $state<View | null>(null)
   let screen = $state<Screen>('main')
@@ -170,6 +171,8 @@
     onping={() => guard(() => backend.PingProfiles())}
     onfastest={() => guard(() => backend.SelectFastest())}
   />
+{:else if screen === 'diagnostics'}
+  <Diagnostics onback={() => (screen = 'main')} />
 {:else if screen === 'settings'}
   <Settings
     {view}
@@ -291,6 +294,14 @@
               ? `${activeProfile.flag} ${activeProfile.name}`.trim()
               : 'Сервер не выбран'}
           </div>
+        </div>
+        <div class="spacer"></div>
+        <span class="chev">›</span>
+      </button>
+      <button class="row" onclick={() => (screen = 'diagnostics')}>
+        <div>
+          <div class="title">Диагностика</div>
+          <div class="hint">Проверить, что именно не открывается</div>
         </div>
         <div class="spacer"></div>
         <span class="chev">›</span>
