@@ -39,8 +39,10 @@ jobs:
       - name: go vet
         run: go vet ./internal/... ./cmd/sa05ctl ./cmd/sa05-helper
 
+      # cmd/sa05 embeds the built frontend; it is compiled in the build job, which has
+      # node. Here only the packages that stand on their own are tested.
       - name: Тесты
-        run: go test -count=1 ./...
+        run: go test -count=1 ./internal/... ./cmd/sa05ctl ./cmd/sa05-helper
 
   build-linux:
     name: Сборка (Linux)
@@ -126,6 +128,7 @@ jobs:
         run: |
           go build ./internal/...
           go build -o sa05ctl.exe ./cmd/sa05ctl
+          go vet ./internal/...
 
       - name: Тесты
         shell: bash

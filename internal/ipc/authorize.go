@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/user"
+	"runtime"
 	"strconv"
 )
 
@@ -19,6 +20,9 @@ func AllowUIDs(uids ...uint32) Authorizer {
 		allowed[uid] = true
 	}
 	return func(credentials PeerCredentials) error {
+		if runtime.GOOS == "windows" {
+			return nil
+		}
 		if allowed[credentials.UID] {
 			return nil
 		}
@@ -28,8 +32,14 @@ func AllowUIDs(uids ...uint32) Authorizer {
 
 // AllowLoginUsers authorizes root and any regular login account. It is the default when
 // the helper is installed without a fixed uid, e.g. on a multi-user desktop.
+//
+// On Windows the peer cannot be identified this way; access is enforced by the pipe's
+// security descriptor, and this authorizer accepts whoever got through it.
 func AllowLoginUsers() Authorizer {
 	return func(credentials PeerCredentials) error {
+		if runtime.GOOS == "windows" {
+			return nil
+		}
 		if credentials.UID == 0 || credentials.UID >= firstNormalUID {
 			return nil
 		}
