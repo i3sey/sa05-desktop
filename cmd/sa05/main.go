@@ -114,6 +114,9 @@ func (b *App) startup(ctx context.Context) {
 		quit: func() { wailsruntime.Quit(ctx) },
 	}
 	b.tray.start(ctx)
+	// Background work starts only with the GUI: the CLI and the tests drive the controller
+	// directly and must not get a network watcher they did not ask for.
+	b.controller.Start(ctx)
 	if b.pendingLink != "" {
 		link := b.pendingLink
 		b.pendingLink = ""

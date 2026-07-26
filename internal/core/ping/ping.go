@@ -130,6 +130,13 @@ func milliseconds(latency time.Duration) int {
 	return value
 }
 
+// Probe measures the time from issuing the request to the first response byte through the
+// given SOCKS port. It is exported because the same measurement answers a different
+// question elsewhere: whether a tunnel that still listens is actually carrying traffic.
+func Probe(ctx context.Context, socksPort int, probeURL string) (time.Duration, error) {
+	return probe(ctx, socksPort, probeURL)
+}
+
 // probe measures the time from issuing the request to the first response byte through
 // the given SOCKS port.
 func probe(ctx context.Context, socksPort int, probeURL string) (time.Duration, error) {

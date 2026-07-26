@@ -23,6 +23,7 @@ import (
 	"github.com/fife/sa05-desktop/internal/desktop"
 	"github.com/fife/sa05-desktop/internal/ipc"
 	"github.com/fife/sa05-desktop/internal/netbypass"
+	"github.com/fife/sa05-desktop/internal/notify"
 	"github.com/fife/sa05-desktop/internal/storage"
 	"github.com/fife/sa05-desktop/internal/sysproxy"
 	"github.com/fife/sa05-desktop/internal/tgws"
@@ -84,6 +85,7 @@ type App struct {
 	proxy    sysproxy.Controller
 	telegram *tgws.Proxy
 	helper   *ipc.Client
+	notifier *notify.Notifier
 	// telegramPort overrides the fixed MTProto port; tests set it so they never bind the
 	// real 1443 on a developer's machine.
 	telegramPort int
@@ -120,6 +122,7 @@ func New(store *storage.Store, assetDir string) *App {
 		session:  session,
 		telegram: &tgws.Proxy{},
 		helper:   ipc.NewClient(""),
+		notifier: notify.New(),
 		latency:  map[string]ping.Result{},
 		rootCtx:  rootCtx,
 		rootStop: rootStop,
@@ -284,6 +287,7 @@ func (a *App) Connect(ctx context.Context) error {
 	ports, err := a.core.Start(ctx, profile.JSON)
 	if err != nil {
 		a.fail(state.FailureBackend, err.Error())
+		a.notifier.Send(notify.KindError, "SA05", "Не удалось подключиться: "+err.Error())
 		return err
 	}
 	a.states.Update(func(snapshot *state.Snapshot) {
@@ -298,6 +302,7 @@ func (a *App) Connect(ctx context.Context) error {
 		}
 	})
 	a.startMonitor()
+	a.notifier.Send(notify.KindInfo, "SA05", "Подключено: "+name)
 	return nil
 }
 
@@ -492,8 +497,11 @@ func (a *App) startMonitor() {
 				decision := recovery.RouteChecked(false, snapshot.RecoveryAttempt)
 				if decision != recovery.DecisionReconnect {
 					a.fail(state.FailureHealthCheck, "Соединение с сервером не восстановилось")
+					a.notifier.Send(notify.KindError, "SA05",
+						"Соединение потеряно и не восстановилось")
 					return
 				}
+				a.notifier.Send(notify.KindWarning, "SA05", "Соединение потеряно, переподключаемся")
 				a.states.Update(func(next *state.Snapshot) {
 					next.Status = state.StatusRecovering
 					next.RecoveryAttempt = snapshot.RecoveryAttempt + 1
@@ -546,6 +554,17 @@ func (a *App) fail(kind state.FailureKind, message string) {
 			{Component: state.ComponentXray, Status: state.ComponentFailed},
 		}
 	})
+}
+
+// probeThroughTunnel checks that the tunnel carries traffic, not merely that its port is
+// open. A core whose server became unreachable keeps accepting connections locally.
+func (a *App) probeThroughTunnel(ctx context.Context) bool {
+	snapshot := a.states.Snapshot()
+	if snapshot.SocksPort == 0 {
+		return false
+	}
+	_, err := ping.Probe(ctx, snapshot.SocksPort, xrayconf.DefaultProbeURL)
+	return err == nil
 }
 
 func (a *App) profileViews(cached subscription.State) []ProfileView {
