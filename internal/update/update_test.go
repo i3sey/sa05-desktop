@@ -2,6 +2,8 @@ package update
 
 import (
 	"archive/tar"
+	"archive/zip"
+	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/ed25519"
@@ -58,22 +60,55 @@ func TestParseVersionRejectsGarbage(t *testing.T) {
 	}
 }
 
-// archiveWithBinaries builds a release archive shaped like the real one: a top-level
-// directory holding the binaries and some extra files.
-func archiveWithBinaries(t *testing.T, content string) []byte {
-	t.Helper()
-	buffer := &strings.Builder{}
-	gzipWriter := gzip.NewWriter(newStringWriter(buffer))
-	writer := tar.NewWriter(gzipWriter)
-
-	entries := map[string]string{
+// releaseEntries is what a release archive holds: the binaries plus files the updater
+// must ignore.
+func releaseEntries(content string) map[string]string {
+	return map[string]string{
 		"sa05-v9.9.9-linux-amd64/sa05":        content,
 		"sa05-v9.9.9-linux-amd64/sa05ctl":     content + "-ctl",
 		"sa05-v9.9.9-linux-amd64/README.md":   "документация",
 		"sa05-v9.9.9-linux-amd64/sa05.exe":    content,
 		"sa05-v9.9.9-linux-amd64/sa05ctl.exe": content + "-ctl",
 	}
-	for name, body := range entries {
+}
+
+// archiveWithBinaries builds a release archive in the format this platform publishes:
+// zip on Windows, tar.gz elsewhere. Using the wrong one would test a code path the
+// client never takes.
+func archiveWithBinaries(t *testing.T, content string) []byte {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		return zipArchive(t, content)
+	}
+	return tarArchive(t, content)
+}
+
+func zipArchive(t *testing.T, content string) []byte {
+	t.Helper()
+	buffer := &bytes.Buffer{}
+	writer := zip.NewWriter(buffer)
+	for name, body := range releaseEntries(content) {
+		entry, err := writer.Create(name)
+		if err != nil {
+			t.Fatalf("zip create: %v", err)
+		}
+		if _, err := entry.Write([]byte(body)); err != nil {
+			t.Fatalf("zip write: %v", err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("zip close: %v", err)
+	}
+	return buffer.Bytes()
+}
+
+func tarArchive(t *testing.T, content string) []byte {
+	t.Helper()
+	buffer := &strings.Builder{}
+	gzipWriter := gzip.NewWriter(newStringWriter(buffer))
+	writer := tar.NewWriter(gzipWriter)
+
+	for name, body := range releaseEntries(content) {
 		if err := writer.WriteHeader(&tar.Header{
 			Name:     name,
 			Mode:     0o755,
