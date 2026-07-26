@@ -103,6 +103,51 @@
 
   const activeProfile = $derived((view?.profiles ?? []).find((profile) => profile.active))
 
+  // The local endpoints other applications can be pointed at. They are listed only while
+  // something is actually listening: an address shown for a stopped core would send the
+  // user to configure a dead port.
+  const endpoints = $derived.by(() => {
+    const snapshot = view?.snapshot
+    const list: { label: string; value: string; hint: string }[] = []
+    if (!snapshot) return list
+    if (snapshot.status === 'CONNECTED' && snapshot.socksPort > 0) {
+      list.push({
+        label: 'SOCKS5',
+        value: `127.0.0.1:${snapshot.socksPort}`,
+        hint: 'браузеры, торренты, curl --socks5-hostname',
+      })
+    }
+    if (snapshot.status === 'CONNECTED' && snapshot.httpPort > 0) {
+      list.push({
+        label: 'HTTP',
+        value: `127.0.0.1:${snapshot.httpPort}`,
+        hint: 'http_proxy / https_proxy',
+      })
+    }
+    if (snapshot.telegramOn) {
+      list.push({
+        label: 'MTProto',
+        value: `127.0.0.1:${view?.telegram.port ?? 1443}`,
+        hint: 'Telegram: прокси MTProto с секретом ниже',
+      })
+    }
+    return list
+  })
+
+  let copied = $state('')
+  let copiedTimer: ReturnType<typeof setTimeout> | undefined
+
+  async function copy(value: string) {
+    try {
+      await copyText(value)
+      copied = value
+      clearTimeout(copiedTimer)
+      copiedTimer = setTimeout(() => (copied = ''), 1500)
+    } catch (cause) {
+      error = errorText(cause)
+    }
+  }
+
   async function toggle(name: string, next: boolean) {
     await guard(() => backend.Toggle(name, next))
   }
@@ -212,6 +257,23 @@
         />
       </div>
     </div>
+
+    {#if endpoints.length > 0}
+      <div class="rows">
+        {#each endpoints as endpoint (endpoint.label)}
+          <button class="row" onclick={() => copy(endpoint.value)}>
+            <div>
+              <div class="title">{endpoint.label} <span class="mono">{endpoint.value}</span></div>
+              <div class="hint">{endpoint.hint}</div>
+            </div>
+            <div class="spacer"></div>
+            <span class="pill" class:good={copied === endpoint.value}>
+              {copied === endpoint.value ? 'скопировано' : 'копировать'}
+            </span>
+          </button>
+        {/each}
+      </div>
+    {/if}
 
     <div class="rows">
       <button class="row" onclick={() => (screen = 'servers')}>
