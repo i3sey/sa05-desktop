@@ -110,7 +110,7 @@ jobs:
           go run ./build/sign dist/*.tar.gz dist/*.AppImage
           ls -l dist
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sa05-linux-amd64
           path: |
@@ -197,7 +197,7 @@ jobs:
           go run ./build/sign dist/*.zip
           ls -l dist
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sa05-windows-amd64
           path: dist/*.zip*
