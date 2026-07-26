@@ -1,0 +1,184 @@
+// Command sa05 is the desktop client window.
+//
+// The window is a thin shell: every decision lives in internal/app, which the frontend
+// reaches through the bound methods below. State changes are pushed as "state" events so
+// the UI reflects a reconnect it did not initiate.
+package main
+
+import (
+	"context"
+	"embed"
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/wailsapp/wails/v2"
+	"github.com/wailsapp/wails/v2/pkg/options"
+	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/linux"
+	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
+
+	"github.com/fife/sa05-desktop/internal/app"
+	"github.com/fife/sa05-desktop/internal/core/state"
+	"github.com/fife/sa05-desktop/internal/storage"
+)
+
+//go:embed all:dist
+var assets embed.FS
+
+func main() {
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "ошибка: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
+	store, err := storage.Open("")
+	if err != nil {
+		return err
+	}
+	assetDir, err := storage.DefaultAssetDir()
+	if err != nil {
+		return err
+	}
+	controller := app.New(store, assetDir)
+	defer controller.Shutdown()
+
+	binding := &App{controller: controller}
+	// Arguments: a deep link (sa05://add/<encoded-https-url>) and/or --tray, which is how
+	// the autostart entry launches the client without stealing focus at login.
+	for _, argument := range os.Args[1:] {
+		if argument == "--tray" {
+			binding.startHidden = true
+			continue
+		}
+		binding.pendingLink = argument
+	}
+
+	return wails.Run(&options.App{
+		Title:  "SA05",
+		Width:  420,
+		Height: 620,
+		// Compact panel, not a resizable dashboard: everything fits without scrolling.
+		MinWidth:          380,
+		MinHeight:         520,
+		StartHidden:       binding.startHidden,
+		HideWindowOnClose: true,
+		AssetServer: &assetserver.Options{
+			Assets: assets,
+		},
+		OnStartup:        binding.startup,
+		OnShutdown:       binding.shutdown,
+		Bind:             []any{binding},
+		Linux:            &linux.Options{ProgramName: "sa05"},
+		BackgroundColour: &options.RGBA{R: 250, G: 248, B: 242, A: 1},
+	})
+}
+
+// App is the object Wails exposes to the frontend as window.go.main.App.
+type App struct {
+	controller  *app.App
+	ctx         context.Context
+	unsubscribe func()
+	pendingLink string
+	startHidden bool
+	tray        *tray
+}
+
+func (b *App) startup(ctx context.Context) {
+	b.ctx = ctx
+	// Push every state transition; the frontend re-reads the full view on each one.
+	b.unsubscribe = b.controller.Subscribe(func(snapshot state.Snapshot) {
+		wailsruntime.EventsEmit(ctx, "state", snapshot)
+	})
+	// Best effort: an unregistered scheme only costs deep links, not the client.
+	if err := b.controller.RegisterURLScheme(); err != nil {
+		log.Printf("схема sa05:// не зарегистрирована: %v", err)
+	}
+	b.tray = &tray{
+		controller: b.controller,
+		show: func() {
+			wailsruntime.WindowShow(ctx)
+			wailsruntime.WindowUnminimise(ctx)
+		},
+		quit: func() { wailsruntime.Quit(ctx) },
+	}
+	b.tray.start(ctx)
+	if b.pendingLink != "" {
+		link := b.pendingLink
+		b.pendingLink = ""
+		go func() {
+			if err := b.controller.ImportSubscription(ctx, link); err != nil {
+				log.Printf("не удалось импортировать ссылку: %v", err)
+			}
+		}()
+	}
+}
+
+func (b *App) shutdown(context.Context) {
+	if b.tray != nil {
+		b.tray.stop()
+	}
+	if b.unsubscribe != nil {
+		b.unsubscribe()
+	}
+	b.controller.Shutdown()
+}
+
+// View returns the whole UI model.
+func (b *App) View() (app.View, error) { return b.controller.View() }
+
+// Import adds or refreshes the subscription.
+func (b *App) Import(url string) error {
+	return b.controller.ImportSubscription(b.context(), url)
+}
+
+// Connect starts the core on the active profile.
+func (b *App) Connect() error { return b.controller.Connect(b.context()) }
+
+// Disconnect stops the core.
+func (b *App) Disconnect() { b.controller.Disconnect() }
+
+// SelectProfile switches the active server.
+func (b *App) SelectProfile(id string) error {
+	return b.controller.SelectProfile(b.context(), id)
+}
+
+// SelectFastest measures every profile and switches to the quickest.
+func (b *App) SelectFastest() (string, error) {
+	return b.controller.SelectFastest(b.context())
+}
+
+// PingProfiles measures every profile.
+func (b *App) PingProfiles() ([]app.ProfileView, error) {
+	return b.controller.PingProfiles(b.context())
+}
+
+// Toggle flips one of the switches.
+func (b *App) Toggle(name string, enabled bool) error {
+	return b.controller.Toggle(b.context(), name, enabled)
+}
+
+// TelegramLink returns the tg:// link for the built-in MTProto proxy.
+func (b *App) TelegramLink() (string, error) { return b.controller.TelegramLink() }
+
+// SetTelegramTransport records the upstream the MTProto proxy should use.
+func (b *App) SetTelegramTransport(value string) error {
+	return b.controller.SetTelegramTransport(b.context(), value)
+}
+
+// OpenURL hands a link to the desktop's default handler.
+func (b *App) OpenURL(url string) {
+	wailsruntime.BrowserOpenURL(b.context(), url)
+}
+
+// Quit closes the application.
+func (b *App) Quit() { wailsruntime.Quit(b.context()) }
+
+func (b *App) context() context.Context {
+	if b.ctx != nil {
+		return b.ctx
+	}
+	return context.Background()
+}

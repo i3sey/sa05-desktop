@@ -1,0 +1,11 @@
+/build/out/
+/third_party/xray-core/
+/frontend/node_modules/
+/frontend/dist/
+/dist/
+*.log
+.DS_Store
+/cmd/sa05/dist/
+/sa05
+/sa05ctl
+/sa05-helper

@@ -1,0 +1,132 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  GO_VERSION: '1.26'
+  NODE_VERSION: '22'
+  # Wails needs its own tags; webkit2_41 selects the WebKitGTK 4.1 API current distros ship.
+  GUI_TAGS: desktop,production,webkit2_41
+
+jobs:
+  test:
+    name: Тесты
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      # The patched core is a build step, not a committed fork: it is re-fetched and
+      # re-patched here, and the patch verifies itself with its own regression test.
+      - name: Вендоринг Xray-core
+        run: build/vendor-xray.sh
+
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l ./cmd ./internal | grep -v 'internal/tgws/upstream/proxy.go' || true)"
+          if [ -n "$unformatted" ]; then
+            echo "не отформатировано:"; echo "$unformatted"; exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./internal/... ./cmd/sa05ctl ./cmd/sa05-helper
+
+      - name: Тесты
+        run: go test -count=1 ./...
+
+  build-linux:
+    name: Сборка (Linux)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Системные зависимости
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev
+
+      - name: Вендоринг Xray-core
+        run: build/vendor-xray.sh
+
+      - name: Фронтенд
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+
+      - name: Бинарники
+        run: |
+          mkdir -p build/out
+          go build -tags "$GUI_TAGS" -ldflags "-w -s" -o build/out/sa05 ./cmd/sa05
+          go build -ldflags "-w -s" -o build/out/sa05ctl ./cmd/sa05ctl
+          go build -ldflags "-w -s" -o build/out/sa05-helper ./cmd/sa05-helper
+
+      - name: Проверка запуска
+        run: |
+          build/out/sa05ctl status
+          build/out/sa05-helper -h 2>&1 | head -3
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sa05-linux-amd64
+          path: build/out/
+          retention-days: 14
+
+  build-windows:
+    name: Сборка (Windows)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Вендоринг Xray-core
+        shell: bash
+        run: build/vendor-xray.sh
+
+      - name: Фронтенд
+        shell: bash
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+
+      # The Windows GUI and helper are not finished yet; compiling the shared packages
+      # here keeps the platform from silently rotting while that work lands.
+      - name: Сборка общих пакетов
+        shell: bash
+        run: |
+          go build ./internal/...
+          go build -o sa05ctl.exe ./cmd/sa05ctl
+
+      - name: Тесты
+        shell: bash
+        run: go test -count=1 ./internal/core/... ./internal/storage/... ./internal/tgws/...
