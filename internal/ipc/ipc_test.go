@@ -3,6 +3,7 @@ package ipc
 import (
 	"context"
 	"errors"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -104,6 +105,11 @@ func TestHandlerErrorReachesClient(t *testing.T) {
 }
 
 func TestUnauthorizedPeerIsRefused(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// Windows pipes carry no peer uid; access is decided by the pipe's security
+		// descriptor before a connection ever reaches the authorizer.
+		t.Skip("на Windows доступ ограничивает дескриптор безопасности канала")
+	}
 	// A uid the policy does not know must not be able to touch routing.
 	client := startServer(t, &fakeHandler{}, AllowUIDs(CurrentUID()+1))
 
