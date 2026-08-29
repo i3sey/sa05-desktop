@@ -13,11 +13,11 @@ import (
 )
 
 const (
-	runKeyPath       = `Software\Microsoft\Windows\CurrentVersion\Run`
-	runValue         = "SA05"
-	taskName         = "SA05"
-	schemeKey        = `Software\Classes\sa05`
-	autostartDelay   = "0000:30"
+	runKeyPath     = `Software\Microsoft\Windows\CurrentVersion\Run`
+	runValue       = "SA05"
+	taskName       = "SA05"
+	schemeKey      = `Software\Classes\sa05`
+	autostartDelay = "0000:30"
 )
 
 // windowsIntegration writes per-user registry entries only: nothing here needs elevation.

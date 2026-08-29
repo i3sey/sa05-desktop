@@ -79,4 +79,3 @@ func TestRegisterURLSchemeWritesHandler(t *testing.T) {
 		t.Fatalf("Exec без %%u:\n%s", entry)
 	}
 }
-
