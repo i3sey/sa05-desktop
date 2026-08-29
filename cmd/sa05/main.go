@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -20,6 +21,7 @@ import (
 
 	"github.com/fife/sa05-desktop/internal/app"
 	"github.com/fife/sa05-desktop/internal/core/state"
+	"github.com/fife/sa05-desktop/internal/desktop"
 	"github.com/fife/sa05-desktop/internal/storage"
 )
 
@@ -66,6 +68,17 @@ func run() error {
 			continue
 		}
 		binding.pendingLink = argument
+	}
+
+	if binding.startHidden {
+		if err := desktop.InitBootLog(); err != nil {
+			log.Printf("журнал автозапуска не открыт: %v", err)
+		}
+		desktop.BootLog("запуск с --tray")
+		shellCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		desktop.WaitForShellReady(shellCtx)
+		cancel()
+		desktop.BootLog("оболочка готова, открываем GUI")
 	}
 
 	return wails.Run(&options.App{

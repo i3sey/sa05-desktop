@@ -80,11 +80,3 @@ func TestRegisterURLSchemeWritesHandler(t *testing.T) {
 	}
 }
 
-func TestDesktopEntryQuotesOnlyWhenNeeded(t *testing.T) {
-	if got := quote("/usr/bin/sa05"); got != "/usr/bin/sa05" {
-		t.Fatalf("простой путь закавычен: %q", got)
-	}
-	if got := quote(`/opt/my apps/sa05`); got != `"/opt/my apps/sa05"` {
-		t.Fatalf("путь с пробелом: %q", got)
-	}
-}

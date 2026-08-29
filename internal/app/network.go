@@ -11,10 +11,17 @@ import (
 	"github.com/fife/sa05-desktop/internal/notify"
 )
 
+const (
+	autoConnectMaxAttempts = 3
+	autoConnectRetryDelay  = 5 * time.Second
+	autoConnectNetworkWait = 2 * time.Minute
+	networkPollInterval    = 500 * time.Millisecond
+)
+
 // Start begins the background work the GUI needs: watching the network and, when the user
 // asked for it, bringing the tunnel up at launch.
 //
-// It is separate from New so the CLI and the tests can use the controller without any
+// It is separate from New so the CLI and the tests drive the controller without any
 // background activity.
 func (a *App) Start(ctx context.Context) {
 	a.watchNetwork(ctx)
@@ -34,9 +41,25 @@ func (a *App) autoConnect(ctx context.Context) {
 		return
 	}
 	go func() {
-		if err := a.Connect(ctx); err != nil {
-			log.Printf("автоподключение не удалось: %v", err)
+		connectCtx := a.rootCtx
+		if !waitForNetwork(connectCtx, autoConnectNetworkWait) {
+			log.Printf("автоподключение: сеть не появилась")
 			return
+		}
+		for attempt := 1; attempt <= autoConnectMaxAttempts; attempt++ {
+			if err := a.Connect(connectCtx); err != nil {
+				log.Printf("автоподключение не удалось (попытка %d): %v", attempt, err)
+				if attempt < autoConnectMaxAttempts {
+					select {
+					case <-connectCtx.Done():
+						return
+					case <-time.After(autoConnectRetryDelay):
+					}
+					continue
+				}
+				return
+			}
+			break
 		}
 		// The toggles the user left on belong to the connection, so they come back with it.
 		if stored.Toggles.SystemProxy {
@@ -45,16 +68,31 @@ func (a *App) autoConnect(ctx context.Context) {
 			}
 		}
 		if stored.Toggles.Tun {
-			if err := a.enableTun(ctx); err != nil {
+			if err := a.enableTun(connectCtx); err != nil {
 				log.Printf("туннель не восстановлен: %v", err)
 			}
 		}
 		if stored.Toggles.Telegram {
-			if err := a.enableTelegram(ctx); err != nil {
+			if err := a.enableTelegram(connectCtx); err != nil {
 				log.Printf("Telegram не восстановлен: %v", err)
 			}
 		}
 	}()
+}
+
+func waitForNetwork(ctx context.Context, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if netmon.Online() {
+			return true
+		}
+		select {
+		case <-ctx.Done():
+			return netmon.Online()
+		case <-time.After(networkPollInterval):
+		}
+	}
+	return netmon.Online()
 }
 
 // watchNetwork reconnects the tunnel when the machine changes network.
@@ -104,6 +142,9 @@ func (a *App) handleNetworkChangeWith(
 ) netmon.Fingerprint {
 	snapshot := a.states.Snapshot()
 	if !snapshot.Requested() {
+		if current != netmon.None && previous != current {
+			a.tryAutoConnectOnNetwork(ctx)
+		}
 		return current
 	}
 
@@ -145,6 +186,38 @@ func (a *App) handleNetworkChangeWith(
 		}
 		return current
 	}
+}
+
+func (a *App) tryAutoConnectOnNetwork(ctx context.Context) {
+	stored, err := a.store.Load()
+	if err != nil || !stored.Toggles.AutoConnect || !stored.Subscription.Authorized() {
+		return
+	}
+	snapshot := a.states.Snapshot()
+	if snapshot.Status == state.StatusConnected || snapshot.Status == state.StatusConnecting {
+		return
+	}
+	go func() {
+		if err := a.Connect(a.rootCtx); err != nil {
+			log.Printf("автоподключение после появления сети не удалось: %v", err)
+			return
+		}
+		if stored.Toggles.SystemProxy {
+			if err := a.enableSystemProxy(); err != nil {
+				log.Printf("системный прокси не восстановлен: %v", err)
+			}
+		}
+		if stored.Toggles.Tun {
+			if err := a.enableTun(a.rootCtx); err != nil {
+				log.Printf("туннель не восстановлен: %v", err)
+			}
+		}
+		if stored.Toggles.Telegram {
+			if err := a.enableTelegram(a.rootCtx); err != nil {
+				log.Printf("Telegram не восстановлен: %v", err)
+			}
+		}
+	}()
 }
 
 // reconnectAfterNetworkChange restarts the stack and re-applies the toggles that belong

@@ -63,7 +63,7 @@ func (l *linuxIntegration) SetAutostart(enabled bool) error {
 	}
 	// --tray starts minimised: an autostarted client should not steal focus at login.
 	entry := desktopEntry(executable, map[string]string{
-		"Exec":                      quote(executable) + " --tray",
+		"Exec":                      Quote(executable) + " --tray",
 		"X-GNOME-Autostart-enabled": "true",
 	})
 	return writeFile(path, entry)
@@ -87,7 +87,7 @@ func (l *linuxIntegration) RegisterURLScheme() error {
 	}
 	path := l.applicationPath()
 	entry := desktopEntry(executable, map[string]string{
-		"Exec":      quote(executable) + " %u",
+		"Exec":      Quote(executable) + " %u",
 		"MimeType":  "x-scheme-handler/sa05;",
 		"NoDisplay": "false",
 	})
@@ -111,7 +111,7 @@ func desktopEntry(executable string, extra map[string]string) string {
 		"Type":     "Application",
 		"Name":     "SA05",
 		"Comment":  "Клиент SA05: Xray, системный прокси, TUN и Telegram",
-		"Exec":     quote(executable),
+		"Exec":     Quote(executable),
 		"Icon":     "sa05",
 		"Terminal": "false",
 		"Category": "Network;",
@@ -129,14 +129,6 @@ func desktopEntry(executable string, extra map[string]string) string {
 		}
 	}
 	return builder.String()
-}
-
-// quote protects paths containing spaces, which Exec= splits on otherwise.
-func quote(path string) string {
-	if !strings.ContainsAny(path, " \t\"") {
-		return path
-	}
-	return `"` + strings.ReplaceAll(path, `"`, `\"`) + `"`
 }
 
 func writeFile(path, content string) error {
