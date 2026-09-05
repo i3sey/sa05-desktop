@@ -112,6 +112,9 @@ type State struct {
 	Toggles      Toggles            `json:"toggles"`
 	// Theme is the UI appearance: auto, light or dark. Auto follows the OS scheme.
 	Theme string `json:"theme"`
+	// Onboarded records that the user has seen the first-run tour. It gates nothing
+	// functional; the tour is always reopenable from the header button.
+	Onboarded bool `json:"onboarded"`
 	// SysProxy is the desktop's proxy configuration from before SA05 changed it. It is
 	// persisted so a crash or a forced quit can still restore the user's own settings on
 	// the next start.

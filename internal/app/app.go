@@ -64,8 +64,11 @@ type View struct {
 	Toggles      storage.Toggles    `json:"toggles"`
 	// Theme is the UI appearance: auto, light or dark. The frontend applies it via
 	// data-theme on <html> and keeps following View, so no extra call is needed.
-	Theme    string       `json:"theme"`
-	Telegram TelegramView `json:"telegram"`
+	Theme string `json:"theme"`
+	// Onboarded tells the frontend whether the first-run tour has been seen.
+	Onboarded bool          `json:"onboarded"`
+	Usage     storage.Usage `json:"usage"`
+	Telegram  TelegramView  `json:"telegram"`
 	// HelperAvailable tells the UI whether the privileged component is installed, so a
 	// disabled TUN toggle can explain itself instead of failing on click.
 	HelperAvailable bool `json:"helperAvailable"`
@@ -194,6 +197,7 @@ func (a *App) View() (View, error) {
 		Profiles:        a.profileViews(stored.Subscription),
 		Toggles:         stored.Toggles,
 		Theme:           storage.NormalizeTheme(stored.Theme),
+		Onboarded:       stored.Onboarded,
 		Telegram:        telegram,
 		HelperAvailable: a.HelperAvailable(context.Background()),
 	}, nil

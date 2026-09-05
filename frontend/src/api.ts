@@ -68,6 +68,15 @@ export interface SubscriptionView {
   count: number
 }
 
+export interface Usage {
+  day: string
+  dayUp: number
+  dayDown: number
+  month: string
+  monthUp: number
+  monthDown: number
+}
+
 export interface Toggles {
   systemProxy: boolean
   tun: boolean
@@ -126,7 +135,9 @@ export interface View {
   subscription: SubscriptionView
   profiles: ProfileView[] | null
   toggles: Toggles
+  usage: Usage
   theme: string
+  onboarded: boolean
   telegram: TelegramView
   helperAvailable: boolean
 }
@@ -142,6 +153,7 @@ interface Backend {
   PingProfiles(): Promise<ProfileView[]>
   Toggle(name: string, enabled: boolean): Promise<void>
   SetTheme(value: string): Promise<void>
+  MarkOnboarded(): Promise<void>
   Diagnose(): Promise<DiagnosticsReport>
   CheckUpdate(): Promise<UpdateView>
   InstallUpdate(): Promise<UpdateView>
@@ -202,6 +214,8 @@ const mockView: View = {
     muteNotifications: false,
   },
   theme: 'auto',
+  usage: { day: '', dayUp: 0, dayDown: 0, month: '', monthUp: 0, monthDown: 0 },
+  onboarded: true,
   telegram: { transport: 'auto', port: 1443, link: '', applied: false },
   helperAvailable: false,
 }
@@ -219,6 +233,7 @@ const mock: Backend = {
   PingProfiles: async () => [],
   Toggle: async () => {},
   SetTheme: async () => {},
+  MarkOnboarded: async () => {},
   Diagnose: async () => {
     throw new Error('Браузерный режим: бэкенд недоступен')
   },

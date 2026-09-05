@@ -406,16 +406,18 @@
         <div class="spacer"></div>
         <span class="chev">›</span>
       </button>
-      {#if view.telegram.link}
-        <button class="row" onclick={() => guard(() => copyText(view.telegram.link))}>
-          <div>
-            <div class="title">Ссылка для Telegram</div>
-            <div class="hint">Скопировать tg://proxy и вставить в Telegram</div>
-          </div>
-          <div class="spacer"></div>
-          <span class="chev">⧉</span>
-        </button>
-      {/if}
     </div>
   </div>
+  {#if details}
+    <ModeDetails
+      mode={details}
+      {view}
+      {busy}
+      onclose={() => (details = null)}
+      ontoggle={toggle}
+    />
+  {/if}
+{/if}
+{#if view && (!view.onboarded || helpOpen)}
+  <Onboarding onclose={closeHelp} />
 {/if}

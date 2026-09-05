@@ -233,6 +233,11 @@ func (b *App) SetTheme(value string) error {
 	return b.controller.SetTheme(b.context(), value)
 }
 
+// MarkOnboarded records that the first-run tour has been shown.
+func (b *App) MarkOnboarded() error {
+	return b.controller.MarkOnboarded()
+}
+
 // OpenURL hands a link to the desktop's default handler.
 func (b *App) OpenURL(url string) {
 	wailsruntime.BrowserOpenURL(b.context(), url)
