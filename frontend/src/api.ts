@@ -125,6 +125,7 @@ export interface View {
   subscription: SubscriptionView
   profiles: ProfileView[] | null
   toggles: Toggles
+  theme: string
   telegram: TelegramView
   helperAvailable: boolean
 }
@@ -138,6 +139,7 @@ interface Backend {
   SelectFastest(): Promise<string>
   PingProfiles(): Promise<ProfileView[]>
   Toggle(name: string, enabled: boolean): Promise<void>
+  SetTheme(value: string): Promise<void>
   Diagnose(): Promise<DiagnosticsReport>
   CheckUpdate(): Promise<UpdateView>
   InstallUpdate(): Promise<UpdateView>
@@ -196,6 +198,7 @@ const mockView: View = {
     autostart: false,
     autoUpdate: true,
   },
+  theme: 'auto',
   telegram: { transport: 'auto', port: 1443, link: '', applied: false },
   helperAvailable: false,
 }
@@ -211,6 +214,7 @@ const mock: Backend = {
   SelectFastest: async () => '',
   PingProfiles: async () => [],
   Toggle: async () => {},
+  SetTheme: async () => {},
   Diagnose: async () => {
     throw new Error('Браузерный режим: бэкенд недоступен')
   },

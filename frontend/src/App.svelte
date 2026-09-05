@@ -152,6 +152,19 @@
   async function toggle(name: string, next: boolean) {
     await guard(() => backend.Toggle(name, next))
   }
+
+  // The theme lives in state.json and arrives with every View; the DOM attribute is
+  // just its projection so CSS can switch palettes. A localStorage mirror keeps the
+  // first paint correct before the first View arrives.
+  $effect(() => {
+    const theme = view?.theme ?? 'auto'
+    document.documentElement.dataset.theme = theme
+    try {
+      localStorage.setItem('sa05-theme', theme)
+    } catch {
+      /* private mode: the next View will set it again */
+    }
+  })
 </script>
 
 {#if !view}
@@ -181,6 +194,7 @@
     onback={() => (screen = 'main')}
     onimport={(url) => guard(() => backend.Import(url))}
     ontoggle={toggle}
+    ontheme={(value) => guard(() => backend.SetTheme(value))}
     ontransport={(value) => guard(() => backend.SetTelegramTransport(value))}
   />
 {:else}

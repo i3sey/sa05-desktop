@@ -62,7 +62,10 @@ type View struct {
 	Subscription SubscriptionView   `json:"subscription"`
 	Profiles     []ProfileView      `json:"profiles"`
 	Toggles      storage.Toggles    `json:"toggles"`
-	Telegram     TelegramView       `json:"telegram"`
+	// Theme is the UI appearance: auto, light or dark. The frontend applies it via
+	// data-theme on <html> and keeps following View, so no extra call is needed.
+	Theme    string       `json:"theme"`
+	Telegram TelegramView `json:"telegram"`
 	// HelperAvailable tells the UI whether the privileged component is installed, so a
 	// disabled TUN toggle can explain itself instead of failing on click.
 	HelperAvailable bool `json:"helperAvailable"`
@@ -190,6 +193,7 @@ func (a *App) View() (View, error) {
 		Subscription:    subscriptionView(stored.Subscription),
 		Profiles:        a.profileViews(stored.Subscription),
 		Toggles:         stored.Toggles,
+		Theme:           storage.NormalizeTheme(stored.Theme),
 		Telegram:        telegram,
 		HelperAvailable: a.HelperAvailable(context.Background()),
 	}, nil
@@ -393,6 +397,16 @@ func (a *App) Toggle(ctx context.Context, name string, enabled bool) error {
 	default:
 		return fmt.Errorf("неизвестный переключатель %q", name)
 	}
+}
+
+// SetTheme records the UI appearance. Unknown values fall back to auto (follow the
+// OS scheme) instead of failing, so a hand-edited state file cannot break the UI.
+func (a *App) SetTheme(_ context.Context, value string) error {
+	theme := storage.NormalizeTheme(value)
+	_, err := a.store.Update(func(next *storage.State) {
+		next.Theme = theme
+	})
+	return err
 }
 
 // PingProfiles measures every profile and caches the results for the servers screen.

@@ -1,6 +1,10 @@
 /* SA05 palette, carried over from the Android client so both clients read as one product:
    ocean is the accent, sand and coral mark warning and error states. */
-:root {
+/* The palette follows data-theme on <html>, which the frontend projects from View.theme
+   (auto = follow the OS, the previous behaviour). The :not([data-theme]) branch covers
+   the first paint before the backend value arrives. */
+:root,
+:root[data-theme='light'] {
   --ocean: #006a66;
   --ocean-bright: #8cd5d0;
   --sand: #665c43;
@@ -19,11 +23,25 @@
 
   --radius: 14px;
   --gap: 12px;
-  color-scheme: light dark;
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  --bg: #111411;
+  --surface: #1a1e1a;
+  --surface-alt: #232823;
+  --border: #2f352f;
+  --text: #e2e3dd;
+  --text-dim: #a9ada4;
+  --accent: var(--ocean-bright);
+  --accent-text: #04302e;
+  --danger: var(--coral-bright);
+  color-scheme: dark;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme]),
+  :root[data-theme='auto'] {
     --bg: #111411;
     --surface: #1a1e1a;
     --surface-alt: #232823;
@@ -33,6 +51,7 @@
     --accent: var(--ocean-bright);
     --accent-text: #04302e;
     --danger: var(--coral-bright);
+    color-scheme: dark;
   }
 }
 

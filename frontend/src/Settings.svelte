@@ -10,12 +10,19 @@
     onback: () => void
     onimport: (url: string) => void
     ontoggle: (name: string, next: boolean) => void
+    ontheme: (value: string) => void
     ontransport: (value: string) => void
   }
 
-  let { view, busy, error, onback, onimport, ontoggle, ontransport }: Props = $props()
+  let { view, busy, error, onback, onimport, ontoggle, ontheme, ontransport }: Props = $props()
   // Seeded once: the field is editable, so later refreshes must not overwrite typing.
   let url = $state(untrack(() => view.subscription.url))
+
+  const themes = [
+    { value: 'auto', label: 'Как в системе' },
+    { value: 'light', label: 'Светлая' },
+    { value: 'dark', label: 'Тёмная' },
+  ]
 
   const transports = [
     { value: 'auto', label: 'Автоматически' },
@@ -80,6 +87,19 @@
       <p class="hint mono">{view.subscription.userInfo}</p>
     {/if}
     {#if error}<p class="error">{error}</p>{/if}
+  </div>
+
+  <div class="card status">
+    <h2>Оформление</h2>
+    <select
+      value={view.theme ?? 'auto'}
+      disabled={busy}
+      onchange={(event) => ontheme((event.currentTarget as HTMLSelectElement).value)}
+    >
+      {#each themes as theme (theme.value)}
+        <option value={theme.value}>{theme.label}</option>
+      {/each}
+    </select>
   </div>
 
   <div class="card status">

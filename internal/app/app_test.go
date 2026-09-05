@@ -267,6 +267,39 @@ func TestTogglesPersistAndUnimplementedOnesRefuse(t *testing.T) {
 	}
 }
 
+func TestSetThemePersistsAndNormalizes(t *testing.T) {
+	harness := newHarness(t)
+	ctx := context.Background()
+	view, err := harness.app.View()
+	if err != nil {
+		t.Fatalf("View: %v", err)
+	}
+	if view.Theme != "auto" {
+		t.Fatalf("тема по умолчанию = %q", view.Theme)
+	}
+	if err := harness.app.SetTheme(ctx, "dark"); err != nil {
+		t.Fatalf("SetTheme(dark): %v", err)
+	}
+	stored, err := harness.store.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if stored.Theme != "dark" {
+		t.Fatalf("тема не сохранена: %q", stored.Theme)
+	}
+	// Garbage must not break the UI: it falls back to following the system.
+	if err := harness.app.SetTheme(ctx, "чепуха"); err != nil {
+		t.Fatalf("SetTheme(чепуха): %v", err)
+	}
+	view, err = harness.app.View()
+	if err != nil {
+		t.Fatalf("View: %v", err)
+	}
+	if view.Theme != "auto" {
+		t.Fatalf("тема не нормализована: %q", view.Theme)
+	}
+}
+
 func TestTelegramLinkPersistsSecret(t *testing.T) {
 	harness := newHarness(t)
 	link, err := harness.app.TelegramLink()

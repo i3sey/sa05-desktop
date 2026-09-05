@@ -39,6 +39,24 @@ type TelegramSettings struct {
 	Applied bool `json:"applied"`
 }
 
+// Theme values for the UI appearance. "auto" follows the OS color scheme.
+const (
+	ThemeAuto  = "auto"
+	ThemeLight = "light"
+	ThemeDark  = "dark"
+)
+
+// NormalizeTheme maps any stored value to a supported theme, falling back to auto
+// so older state files without the field keep following the system.
+func NormalizeTheme(value string) string {
+	switch value {
+	case ThemeLight, ThemeDark:
+		return value
+	default:
+		return ThemeAuto
+	}
+}
+
 // Toggles are the three switches on the main screen plus the tunnel policy flags.
 type Toggles struct {
 	SystemProxy bool `json:"systemProxy"`
@@ -60,6 +78,8 @@ type State struct {
 	Subscription subscription.State `json:"subscription"`
 	Telegram     TelegramSettings   `json:"telegram"`
 	Toggles      Toggles            `json:"toggles"`
+	// Theme is the UI appearance: auto, light or dark. Auto follows the OS scheme.
+	Theme string `json:"theme"`
 	// SysProxy is the desktop's proxy configuration from before SA05 changed it. It is
 	// persisted so a crash or a forced quit can still restore the user's own settings on
 	// the next start.
@@ -77,6 +97,7 @@ func Defaults() State {
 			KillSwitch: true,
 			AutoUpdate: true,
 		},
+		Theme: ThemeAuto,
 	}
 }
 

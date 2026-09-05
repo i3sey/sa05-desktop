@@ -220,6 +220,11 @@ func (b *App) SetTelegramTransport(value string) error {
 	return b.controller.SetTelegramTransport(b.context(), value)
 }
 
+// SetTheme records the UI appearance: auto, light or dark.
+func (b *App) SetTheme(value string) error {
+	return b.controller.SetTheme(b.context(), value)
+}
+
 // OpenURL hands a link to the desktop's default handler.
 func (b *App) OpenURL(url string) {
 	wailsruntime.BrowserOpenURL(b.context(), url)
