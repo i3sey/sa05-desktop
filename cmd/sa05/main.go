@@ -9,6 +9,7 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"time"
@@ -45,6 +46,27 @@ func main() {
 	}
 }
 
+// logFileBytes caps the mirrored log: stdout stays the primary sink, the file is only
+// a short tail for the diagnostics export.
+const logFileBytes = 2 << 20
+
+// setupLogFile tees the log into the cache dir so "send logs to the developer" works
+// even when the client was started from the desktop menu and stdout is lost.
+func setupLogFile() {
+	path, err := storage.DefaultLogPath()
+	if err != nil {
+		return
+	}
+	if info, err := os.Stat(path); err == nil && info.Size() > logFileBytes {
+		_ = os.Remove(path)
+	}
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return
+	}
+	log.SetOutput(io.MultiWriter(os.Stderr, file))
+}
+
 func run() error {
 	// WebKitGTK + Wayland + NVIDIA (Hyprland): DMABUF-рендерер падает с
 	// "Error 71 dispatching to Wayland display" сразу при старте.
@@ -53,6 +75,7 @@ func run() error {
 		os.Setenv("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
 	}
 	app.Version = version
+	setupLogFile()
 
 	store, err := storage.Open("")
 	if err != nil {
@@ -213,6 +236,14 @@ func (b *App) CheckUpdate() (app.UpdateView, error) {
 // InstallUpdate installs the update found by the last check.
 func (b *App) InstallUpdate() (app.UpdateView, error) {
 	return b.controller.InstallUpdate(b.context())
+}
+
+// LogBundle packs the log tail plus the current view for "send to the developer".
+func (b *App) LogBundle() (string, error) { return b.controller.LogBundle() }
+
+// CheckIP reports the public address, through the tunnel when one is up.
+func (b *App) CheckIP() (app.IPInfo, error) {
+	return b.controller.CheckIP(b.context())
 }
 
 // Diagnose runs the connectivity checks and returns their verdict.

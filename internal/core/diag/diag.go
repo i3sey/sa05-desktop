@@ -113,13 +113,6 @@ var Targets = []Target{
 		MinimumBodyBytes: 128,
 	},
 	{
-		ID:               "kinozal",
-		Label:            "Kinozal",
-		URL:              "https://kinozal.tv/",
-		Group:            GroupDPI,
-		MinimumBodyBytes: 128,
-	},
-	{
 		ID:               "nnmclub",
 		Label:            "NNMClub",
 		URL:              "https://nnmclub.to/",

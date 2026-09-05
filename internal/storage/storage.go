@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"time"
 
 	"github.com/fife/sa05-desktop/internal/core/subscription"
 	"github.com/fife/sa05-desktop/internal/sysproxy"
@@ -260,6 +261,16 @@ func DefaultCacheDir() (string, error) {
 		return "", fmt.Errorf("каталог кэша не создан: %w", err)
 	}
 	return path, nil
+}
+
+// DefaultLogPath is where the GUI mirrors its log, so diagnostics can be exported even
+// when stdout is lost (desktop-menu launches have nowhere to show it).
+func DefaultLogPath() (string, error) {
+	directory, err := os.UserCacheDir()
+	if err != nil {
+		return "", fmt.Errorf("каталог журнала не определён: %w", err)
+	}
+	return filepath.Join(directory, appDirName, "sa05.log"), nil
 }
 
 // DefaultAssetDir is where geoip.dat / geosite.dat are looked up at runtime.

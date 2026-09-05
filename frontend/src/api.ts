@@ -114,6 +114,13 @@ export interface DiagnosticResult {
   error: string
 }
 
+export interface IPInfo {
+  ip: string
+  country: string
+  city: string
+  throughTunnel: boolean
+}
+
 export interface DiagnosticsReport {
   verdict: { headline: string; detail: string; controlOk: boolean; bypassOk: boolean }
   results: DiagnosticResult[]
@@ -155,6 +162,8 @@ interface Backend {
   SetTheme(value: string): Promise<void>
   MarkOnboarded(): Promise<void>
   Diagnose(): Promise<DiagnosticsReport>
+  CheckIP(): Promise<IPInfo>
+  LogBundle(): Promise<string>
   CheckUpdate(): Promise<UpdateView>
   InstallUpdate(): Promise<UpdateView>
   TelegramLink(): Promise<string>
@@ -237,6 +246,13 @@ const mock: Backend = {
   Diagnose: async () => {
     throw new Error('Браузерный режим: бэкенд недоступен')
   },
+  CheckIP: async () => ({
+    ip: '203.0.113.7',
+    country: 'DE',
+    city: 'Берлин',
+    throughTunnel: false,
+  }),
+  LogBundle: async () => 'SA05 dev (браузерный режим)',
   CheckUpdate: async () => ({
     current: 'dev',
     available: '',
