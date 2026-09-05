@@ -44,7 +44,9 @@
     // The backend pushes every transition; the poll is only a safety net for events lost
     // while the window was hidden.
     const off = onSnapshot(() => refresh())
-    const poll = setInterval(refresh, 5000)
+    // One-second cadence: it feeds the sparkline stream, so the graph drifts
+    // continuously instead of jumping on every safety-net poll.
+    const poll = setInterval(refresh, 1000)
     return () => {
       off()
       clearInterval(poll)

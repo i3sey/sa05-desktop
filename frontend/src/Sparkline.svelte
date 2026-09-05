@@ -43,6 +43,30 @@
 
   const downLine = $derived(line(down, max))
   const upLine = $derived(line(up, max))
+
+  // Continuous drift: new samples render one step to the right, then the group
+  // glides back over the sampling interval instead of jumping left in steps.
+  const step = W / (N - 1)
+  let shift = $state(0)
+  let sliding = $state(false)
+  let seen = $state('')
+  $effect(() => {
+    const key = `${down.length}:${up.length}:${down[down.length - 1] ?? ''}:${up[up.length - 1] ?? ''}`
+    if (seen === '') {
+      seen = key
+      return
+    }
+    if (key === seen) return
+    seen = key
+    sliding = false
+    shift = step
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        sliding = true
+        shift = 0
+      }),
+    )
+  })
   const downArea = $derived(
     downLine
       ? `${downLine} L${W},${H} L${(W - (W / (N - 1)) * (down.length - 1)).toFixed(1)},${H} Z`
@@ -53,9 +77,11 @@
 {#if downLine}
   <div class="spark">
     <svg viewBox="0 0 {W} {H}" preserveAspectRatio="none" aria-hidden="true">
-      <path d={downArea} class="area" />
-      <path d={downLine} class="down" />
-      {#if upLine}<path d={upLine} class="up" />{/if}
+      <g class="glide" class:sliding={sliding} style="transform: translateX({shift.toFixed(2)}px)">
+        <path d={downArea} class="area" />
+        <path d={downLine} class="down" />
+        {#if upLine}<path d={upLine} class="up" />{/if}
+      </g>
     </svg>
     <div class="legend">
       <span class="k down">↓ приём</span>
@@ -75,6 +101,11 @@
     width: 100%;
     height: 46px;
     display: block;
+    overflow: hidden;
+  }
+
+  .spark .glide.sliding {
+    transition: transform 1s linear;
   }
 
   .spark path {
