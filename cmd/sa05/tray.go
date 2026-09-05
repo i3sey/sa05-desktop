@@ -26,12 +26,17 @@ type tray struct {
 	cancel  func()
 }
 
-// start attaches the tray to the already running GUI event loop. systray owns a platform
-// menu, so it must be driven by the same loop Wails started rather than its own.
+// start attaches the tray to the already running GUI event loop. On Linux the GTK loop
+// must drive systray through RunWithExternalLoop; on Windows the tray HWND and its
+// message pump must live on the same thread, so we run systray.Run in its own goroutine.
 func (t *tray) start(ctx context.Context) {
-	begin, end := systray.RunWithExternalLoop(t.onReady, func() {})
-	t.stopFn = end
-	begin()
+	if runtime.GOOS == "windows" {
+		go systray.Run(t.onReady, func() {})
+	} else {
+		begin, end := systray.RunWithExternalLoop(t.onReady, func() {})
+		t.stopFn = end
+		begin()
+	}
 
 	watchCtx, cancel := context.WithCancel(ctx)
 	t.cancel = cancel
@@ -50,7 +55,9 @@ func (t *tray) stop() {
 	}
 	if t.stopFn != nil {
 		t.stopFn()
+		return
 	}
+	systray.Quit()
 }
 
 func (t *tray) onReady() {
