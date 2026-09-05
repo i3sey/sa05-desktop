@@ -111,6 +111,8 @@ type State struct {
 	Subscription subscription.State `json:"subscription"`
 	Telegram     TelegramSettings   `json:"telegram"`
 	Toggles      Toggles            `json:"toggles"`
+	// Usage is the cross-session traffic accumulator shown on the main screen.
+	Usage Usage `json:"usage"`
 	// Theme is the UI appearance: auto, light or dark. Auto follows the OS scheme.
 	Theme string `json:"theme"`
 	// Onboarded records that the user has seen the first-run tour. It gates nothing

@@ -104,10 +104,15 @@ type App struct {
 	// pendingUpdate is what the last check found, kept so installing does not re-check.
 	pendingUpdate *update.Available
 	trafficStop   context.CancelFunc
-	monitor       context.CancelFunc
-	rootCtx       context.Context
-	rootStop      context.CancelFunc
-	connectMu     sync.Mutex
+	// usageBase holds the session totals at the last accumulator flush, so the meter
+	// can fold deltas into the persisted day/month usage without rereading the file.
+	usageBaseUp    int64
+	usageBaseDown  int64
+	usageFlushedAt time.Time
+	monitor        context.CancelFunc
+	rootCtx        context.Context
+	rootStop       context.CancelFunc
+	connectMu      sync.Mutex
 }
 
 // New wires the controller. assetDir holds geoip.dat / geosite.dat.
@@ -196,6 +201,7 @@ func (a *App) View() (View, error) {
 		Subscription:    subscriptionView(stored.Subscription),
 		Profiles:        a.profileViews(stored.Subscription),
 		Toggles:         stored.Toggles,
+		Usage:           stored.Usage,
 		Theme:           storage.NormalizeTheme(stored.Theme),
 		Onboarded:       stored.Onboarded,
 		Telegram:        telegram,
@@ -360,11 +366,17 @@ func (a *App) Toggle(ctx context.Context, name string, enabled bool) error {
 	switch name {
 	case "systemProxy":
 		if enabled {
+			if err := a.ensureConnected(ctx); err != nil {
+				return err
+			}
 			return a.enableSystemProxy()
 		}
 		return a.disableSystemProxy()
 	case "tun":
 		if enabled {
+			if err := a.ensureConnected(ctx); err != nil {
+				return err
+			}
 			return a.enableTun(ctx)
 		}
 		return a.disableTun(ctx)

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/fife/sa05-desktop/internal/core/subscription"
 )
@@ -115,5 +116,28 @@ func TestSaveLeavesNoTemporaryFiles(t *testing.T) {
 	}
 	if len(entries) != 1 {
 		t.Fatalf("в каталоге %d файлов, ожидался один", len(entries))
+	}
+}
+
+func TestAddUsageRollsOverDayAndMonth(t *testing.T) {
+	morning := time.Date(2026, 9, 4, 10, 0, 0, 0, time.Local)
+	usage := AddUsage(Usage{}, morning, 100, 200)
+	if usage.DayUp != 100 || usage.DayDown != 200 || usage.MonthUp != 100 || usage.MonthDown != 200 {
+		t.Fatalf("накопление: %+v", usage)
+	}
+	// The same day accumulates.
+	usage = AddUsage(usage, morning.Add(time.Hour), 50, 50)
+	if usage.DayUp != 150 || usage.MonthUp != 150 {
+		t.Fatalf("добавление: %+v", usage)
+	}
+	// The next day resets the day but keeps the month.
+	usage = AddUsage(usage, morning.Add(24*time.Hour), 10, 20)
+	if usage.DayUp != 10 || usage.DayDown != 20 || usage.MonthUp != 160 || usage.MonthDown != 270 {
+		t.Fatalf("смена дня: %+v", usage)
+	}
+	// The next month resets both.
+	usage = AddUsage(usage, morning.AddDate(0, 1, 0), 7, 8)
+	if usage.DayUp != 7 || usage.MonthUp != 7 || usage.Day != "2026-10-04" || usage.Month != "2026-10" {
+		t.Fatalf("смена месяца: %+v", usage)
 	}
 }

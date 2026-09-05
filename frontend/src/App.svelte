@@ -283,6 +283,14 @@
             всего ↓ {formatBytes(view.snapshot.trafficDown)} · ↑ {formatBytes(view.snapshot.trafficUp)}
           </span>
         </div>
+        <div class="meta">
+          <span title="Сегодня">
+            сегодня ↓ {formatBytes(view.usage.dayDown)} · ↑ {formatBytes(view.usage.dayUp)}
+          </span>
+          <span title="В этом месяце">
+            месяц ↓ {formatBytes(view.usage.monthDown)} · ↑ {formatBytes(view.usage.monthUp)}
+          </span>
+        </div>
       {/if}
 
       <button
