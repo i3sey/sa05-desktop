@@ -1,6 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import Switch from './Switch.svelte'
+  import ModeDetails from './ModeDetails.svelte'
+  import Sparkline from './Sparkline.svelte'
+  import Onboarding from './Onboarding.svelte'
   import Servers from './Servers.svelte'
   import Settings from './Settings.svelte'
   import Subscribe from './Subscribe.svelte'
@@ -11,6 +14,8 @@
 
   let view = $state<View | null>(null)
   let screen = $state<Screen>('main')
+  let details = $state<'systemProxy' | 'tun' | 'telegram' | null>(null)
+  let helpOpen = $state(false)
   let error = $state('')
   let busy = $state(false)
   let now = $state(Date.now())
@@ -238,11 +243,12 @@
 
     <div class="rows">
       <div class="row">
-        <div>
+        <button class="rowmain" onclick={() => (details = 'systemProxy')} aria-label="Как работает системный прокси">
           <div class="title">Системный прокси</div>
           <div class="hint">Трафик приложений, уважающих настройки системы</div>
-        </div>
+        </button>
         <div class="spacer"></div>
+        <span class="chev">›</span>
         <Switch
           label="Системный прокси"
           checked={view.toggles.systemProxy}
@@ -251,15 +257,16 @@
         />
       </div>
       <div class="row">
-        <div>
+        <button class="rowmain" onclick={() => (details = 'tun')} aria-label="Как работает TUN">
           <div class="title">TUN</div>
           <div class="hint">
             {view.helperAvailable
               ? 'Весь трафик системы через туннель'
               : 'Нужен системный компонент: sudo build/install-linux.sh'}
           </div>
-        </div>
+        </button>
         <div class="spacer"></div>
+        <span class="chev">›</span>
         <Switch
           label="TUN"
           checked={view.toggles.tun}
@@ -268,11 +275,12 @@
         />
       </div>
       <div class="row">
-        <div>
+        <button class="rowmain" onclick={() => (details = 'telegram')} aria-label="Как работает Telegram-прокси">
           <div class="title">Telegram</div>
           <div class="hint">MTProto-прокси на порту {view.telegram.port}</div>
-        </div>
+        </button>
         <div class="spacer"></div>
+        <span class="chev">›</span>
         <Switch
           label="Telegram"
           checked={view.toggles.telegram}

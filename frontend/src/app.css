@@ -287,6 +287,24 @@ button.link {
   color: var(--text-dim);
 }
 
+/* Tappable label inside a .row: opens the mode detail sheet. The switch next to it
+   keeps working independently. */
+.rowmain {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.rowmain:active {
+  transform: none;
+}
+
 .switch {
   --w: 40px;
   position: relative;
