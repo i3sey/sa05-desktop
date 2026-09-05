@@ -14,24 +14,23 @@ const dbusTimeout = 3 * time.Second
 
 // send delivers the notification over the freedesktop.org D-Bus interface, which every
 // desktop environment implements. No fallback to notify-send: it does the same call, and
-// a missing daemon means notifications are unavailable either way.
-func send(kind Kind, title, body string) {
+// a missing daemon means notifications are unavailable either way. It returns the
+// daemon's notification ID (0 on failure) for the next call's replaces_id.
+func send(kind Kind, title, body string, replace uint32) uint32 {
 	connection, err := dbus.SessionBus()
 	if err != nil {
-		return
+		return 0
 	}
 	object := connection.Object(
 		"org.freedesktop.Notifications", dbus.ObjectPath("/org/freedesktop/Notifications"))
 
 	hints := map[string]dbus.Variant{
-		"urgency": dbus.MakeVariant(urgency(kind)),
-		// Replace the previous SA05 notification instead of stacking: state changes are a
-		// running commentary, not a list of events worth keeping.
+		"urgency":   dbus.MakeVariant(urgency(kind)),
 		"transient": dbus.MakeVariant(kind == KindInfo),
 	}
 	call := object.Call("org.freedesktop.Notifications.Notify", 0,
 		appName,
-		uint32(0),
+		replace,
 		iconName,
 		title,
 		body,
@@ -39,7 +38,14 @@ func send(kind Kind, title, body string) {
 		hints,
 		int32(expiry(kind)),
 	)
-	_ = call.Err
+	if call.Err != nil {
+		return 0
+	}
+	var id uint32
+	if err := call.Store(&id); err != nil {
+		return 0
+	}
+	return id
 }
 
 func urgency(kind Kind) byte {

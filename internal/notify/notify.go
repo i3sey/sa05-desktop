@@ -1,9 +1,3 @@
-// Package notify shows desktop notifications about tunnel state.
-//
-// The client spends most of its life in the tray, so a drop or a recovery has to reach
-// the user without the window being open. Notifications are strictly informational:
-// nothing here can fail in a way that affects the tunnel, so every error is swallowed
-// after being reported once.
 package notify
 
 import (
@@ -36,6 +30,11 @@ type Notifier struct {
 	// identical popups.
 	last     string
 	lastTime time.Time
+	// sendMu serializes delivery so every popup replaces the previous one instead of
+	// stacking next to it. Delivery runs in a goroutine; state transitions never wait.
+	sendMu sync.Mutex
+	// replaceID is the daemon's handle of our last popup, handed back as replaces_id.
+	replaceID uint32
 	// Enabled allows the UI to switch notifications off without unwiring the callers.
 	Enabled bool
 }
@@ -51,17 +50,33 @@ func (n *Notifier) Send(kind Kind, title, body string) {
 	if n == nil || !n.Enabled {
 		return
 	}
-	key := title + "\x00" + body
-
-	n.mutex.Lock()
-	if key == n.last && time.Since(n.lastTime) < repeatWindow {
-		n.mutex.Unlock()
+	if !n.admit(title+"\x00"+body, time.Now()) {
 		return
 	}
-	n.last = key
-	n.lastTime = time.Now()
-	n.mutex.Unlock()
-
 	// Sending is best-effort and must never block a state transition.
-	go send(kind, title, body)
+	go n.deliver(kind, title, body)
+}
+
+// admit reports whether the message passes the repeat filter, recording it when it
+// does. Pure decision under the mutex, so the filter itself is unit-testable without a
+// notification daemon.
+func (n *Notifier) admit(key string, now time.Time) bool {
+	n.mutex.Lock()
+	defer n.mutex.Unlock()
+	if key == n.last && now.Sub(n.lastTime) < repeatWindow {
+		return false
+	}
+	n.last = key
+	n.lastTime = now
+	return true
+}
+
+// deliver hands one popup to the backend, replacing the previous SA05 popup: state
+// changes are a running commentary, not a list of events worth keeping.
+func (n *Notifier) deliver(kind Kind, title, body string) {
+	n.sendMu.Lock()
+	defer n.sendMu.Unlock()
+	if id := send(kind, title, body, n.replaceID); id != 0 {
+		n.replaceID = id
+	}
 }
