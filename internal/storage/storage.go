@@ -70,6 +70,38 @@ type Toggles struct {
 	AutoConnect bool `json:"autoConnect"`
 	Autostart   bool `json:"autostart"`
 	AutoUpdate  bool `json:"autoUpdate"`
+	// MuteNotifications silences desktop popups. Inverted (rather than an Enabled
+	// defaulting to true) so state files written before the switch keep notifying.
+	MuteNotifications bool `json:"muteNotifications"`
+}
+
+// Usage accumulates routed bytes across sessions, cut by local calendar day and month
+// so the user sees "today" and "this month" next to the per-session totals.
+type Usage struct {
+	Day       string `json:"day"`
+	DayUp     int64  `json:"dayUp"`
+	DayDown   int64  `json:"dayDown"`
+	Month     string `json:"month"`
+	MonthUp   int64  `json:"monthUp"`
+	MonthDown int64  `json:"monthDown"`
+}
+
+// AddUsage folds session deltas into the accumulators, resetting them when the local
+// day or month rolled over since the last flush.
+func AddUsage(current Usage, now time.Time, upDelta, downDelta int64) Usage {
+	day := now.Format("2006-01-02")
+	month := now.Format("2006-01")
+	if current.Day != day {
+		current.Day, current.DayUp, current.DayDown = day, 0, 0
+	}
+	if current.Month != month {
+		current.Month, current.MonthUp, current.MonthDown = month, 0, 0
+	}
+	current.DayUp += upDelta
+	current.DayDown += downDelta
+	current.MonthUp += upDelta
+	current.MonthDown += downDelta
+	return current
 }
 
 // State is the whole persisted document.

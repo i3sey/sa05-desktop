@@ -380,7 +380,7 @@ func (a *App) Toggle(ctx context.Context, name string, enabled bool) error {
 			next.Toggles.Autostart = enabled
 		})
 		return err
-	case "autoConnect", "autoUpdate", "killSwitch", "allowIpv6Bypass":
+	case "autoConnect", "autoUpdate", "killSwitch", "allowIpv6Bypass", "notifications":
 		_, err := a.store.Update(func(next *storage.State) {
 			switch name {
 			case "autoConnect":
@@ -391,8 +391,13 @@ func (a *App) Toggle(ctx context.Context, name string, enabled bool) error {
 				next.Toggles.KillSwitch = enabled
 			case "allowIpv6Bypass":
 				next.Toggles.AllowIPv6Bypass = enabled
+			case "notifications":
+				next.Toggles.MuteNotifications = !enabled
 			}
 		})
+		if err == nil && name == "notifications" {
+			a.notifier.Enabled = enabled
+		}
 		return err
 	default:
 		return fmt.Errorf("неизвестный переключатель %q", name)

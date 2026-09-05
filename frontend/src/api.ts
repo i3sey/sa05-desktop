@@ -77,6 +77,7 @@ export interface Toggles {
   autoConnect: boolean
   autostart: boolean
   autoUpdate: boolean
+  muteNotifications: boolean
 }
 
 export interface TelegramView {
@@ -198,6 +199,7 @@ const mockView: View = {
     autoConnect: false,
     autostart: false,
     autoUpdate: true,
+    muteNotifications: false,
   },
   theme: 'auto',
   telegram: { transport: 'auto', port: 1443, link: '', applied: false },

@@ -35,6 +35,40 @@
   let checking = $state(false)
   let installing = $state(false)
   let updateError = $state('')
+  let copied = $state('')
+  let copiedTimer: ReturnType<typeof setTimeout> | undefined
+
+  async function copy(value: string) {
+    try {
+      await copyText(value)
+      copied = value
+      clearTimeout(copiedTimer)
+      copiedTimer = setTimeout(() => (copied = ''), 1500)
+    } catch (cause) {
+      updateError = errorText(cause)
+    }
+  }
+
+  const ports = $derived.by(() => {
+    const snapshot = view.snapshot
+    const list: { label: string; value: string; hint: string }[] = []
+    if (snapshot.status !== 'CONNECTED') return list
+    if (snapshot.socksPort > 0) {
+      list.push({
+        label: 'SOCKS5',
+        value: `127.0.0.1:${snapshot.socksPort}`,
+        hint: 'браузеры, торренты, curl --socks5-hostname',
+      })
+    }
+    if (snapshot.httpPort > 0) {
+      list.push({
+        label: 'HTTP',
+        value: `127.0.0.1:${snapshot.httpPort}`,
+        hint: 'http_proxy / https_proxy',
+      })
+    }
+    return list
+  })
 
   async function checkUpdate() {
     checking = true
@@ -117,11 +151,38 @@
         <option value={transport.value}>{transport.label}</option>
       {/each}
     </select>
-    {#if view.telegram.link}
-      <p class="hint mono">{view.telegram.link}</p>
-      <button onclick={() => copyText(view.telegram.link)}>Скопировать ссылку</button>
+    {#if view.toggles.telegram && view.telegram.link}
+      <button class="primary" onclick={() => backend.OpenURL(view.telegram.link)}>
+        Добавить в Telegram
+      </button>
+      <p class="hint">Откроется Telegram с предложением добавить прокси — ничего копировать не нужно.</p>
+    {:else if !view.toggles.telegram}
+      <p class="hint">Включите Telegram на главном экране — здесь появится кнопка добавления.</p>
     {/if}
   </div>
+
+  {#if ports.length > 0}
+    <div class="card status">
+      <h2>Локальные порты</h2>
+      <p class="desc">Для приложений, настроенных вручную. Работают, пока подключение активно.</p>
+      <div class="rows">
+        {#each ports as port (port.label)}
+          <button class="row" onclick={() => copy(port.value)}>
+            <div>
+              <div class="title">{port.label} <span class="mono">{port.value}</span></div>
+              <div class="hint">{port.hint}</div>
+            </div>
+            <div class="spacer"></div>
+            <span class="pill" class:good={copied === port.value}>
+              {#key copied}<span class="pop"
+                  >{copied === port.value ? 'скопировано' : 'копировать'}</span
+                >{/key}
+            </span>
+          </button>
+        {/each}
+      </div>
+    </div>
+  {/if}
 
   <div class="card status">
     <h2>Обновления</h2>
@@ -211,6 +272,19 @@
         checked={view.toggles.autoUpdate}
         disabled={busy}
         onchange={(next) => ontoggle('autoUpdate', next)}
+      />
+    </div>
+    <div class="row">
+      <div>
+        <div class="title">Уведомления</div>
+        <div class="hint">Подключения, обрывы и обновления</div>
+      </div>
+      <div class="spacer"></div>
+      <Switch
+        label="Уведомления"
+        checked={!view.toggles.muteNotifications}
+        disabled={busy}
+        onchange={(next) => ontoggle('notifications', next)}
       />
     </div>
   </div>

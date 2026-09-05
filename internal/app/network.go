@@ -24,9 +24,20 @@ const (
 // It is separate from New so the CLI and the tests drive the controller without any
 // background activity.
 func (a *App) Start(ctx context.Context) {
+	a.syncNotifier()
 	a.watchNetwork(ctx)
 	a.autoConnect(ctx)
 	a.checkUpdateInBackground(ctx)
+}
+
+// syncNotifier applies the stored notification switch. New() cannot do it: the store
+// is read here, on the GUI path that owns background work.
+func (a *App) syncNotifier() {
+	stored, err := a.store.Load()
+	if err != nil {
+		return
+	}
+	a.notifier.Enabled = !stored.Toggles.MuteNotifications
 }
 
 // autoConnect honours the "connect at startup" toggle. Without this the toggle was
