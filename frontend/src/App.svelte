@@ -8,7 +8,7 @@
   import Settings from './Settings.svelte'
   import Subscribe from './Subscribe.svelte'
   import Diagnostics from './Diagnostics.svelte'
-  import { backend, copyText, errorText, formatBytes, onSnapshot, type View } from './api'
+  import { backend, copyText, errorText, onSnapshot, type View } from './api'
 
   type Screen = 'main' | 'servers' | 'settings' | 'diagnostics'
 
@@ -18,7 +18,6 @@
   let helpOpen = $state(false)
   let error = $state('')
   let busy = $state(false)
-  let now = $state(Date.now())
   // Rate history for the sparkline: one sample per backend refresh while connected.
   let rateHist = $state<{ down: number[]; up: number[] }>({ down: [], up: [] })
   const HIST_MAX = 60
@@ -45,11 +44,9 @@
     // The backend pushes every transition; the poll is only a safety net for events lost
     // while the window was hidden.
     const off = onSnapshot(() => refresh())
-    const tick = setInterval(() => (now = Date.now()), 1000)
     const poll = setInterval(refresh, 5000)
     return () => {
       off()
-      clearInterval(tick)
       clearInterval(poll)
     }
   })
@@ -108,17 +105,6 @@
     }
   })
 
-  const uptime = $derived.by(() => {
-    const startedAt = view?.snapshot.connectedAt ?? 0
-    if (view?.snapshot.status !== 'CONNECTED' || startedAt === 0) return ''
-    const seconds = Math.max(0, Math.floor((now - startedAt) / 1000))
-    const hours = Math.floor(seconds / 3600)
-    const minutes = Math.floor((seconds % 3600) / 60)
-    if (hours > 0) return `${hours} ч ${minutes} мин`
-    if (minutes > 0) return `${minutes} мин`
-    return `${seconds} с`
-  })
-
   const activeProfile = $derived((view?.profiles ?? []).find((profile) => profile.active))
 
   // The local MTProto endpoint is listed only while the proxy is actually running:
@@ -151,16 +137,12 @@
     const parts: string[] = []
     if (snapshot.tunOn) parts.push('весь трафик — через туннель')
     else if (snapshot.systemProxyOn) parts.push('приложения — через прокси')
-    else parts.push('вручную: SOCKS/HTTP из Настроек')
     if (snapshot.telegramOn) parts.push('Telegram — отдельно')
     return parts.join(' · ')
   })
   const heroSub = $derived.by(() => {
     const snapshot = view?.snapshot
     if (!snapshot) return ''
-    if (snapshot.status === 'CONNECTED') {
-      return `↓ ${formatBytes(snapshot.rateDown)}/с · ↑ ${formatBytes(snapshot.rateUp)}/с`
-    }
     if (snapshot.status === 'CONNECTING' || snapshot.status === 'RECOVERING') {
       return 'Это может занять несколько секунд'
     }
@@ -269,29 +251,6 @@
         </div>
       </div>
       {#if routeLine}<p class="route" title="Что сейчас идёт через туннель">⇄ {routeLine}</p>{/if}
-
-      {#if view.snapshot.status === 'CONNECTED'}
-        <div class="meta">
-          {#if uptime}<span>{uptime}</span>{/if}
-          {#if view.snapshot.latencyMs > 0}<span>{view.snapshot.latencyMs} мс</span>{/if}
-          <span title="Скорость сейчас">
-            ↓ {formatBytes(view.snapshot.rateDown)}/с · ↑ {formatBytes(view.snapshot.rateUp)}/с
-          </span>
-        </div>
-        <div class="meta">
-          <span title="За сессию">
-            всего ↓ {formatBytes(view.snapshot.trafficDown)} · ↑ {formatBytes(view.snapshot.trafficUp)}
-          </span>
-        </div>
-        <div class="meta">
-          <span title="Сегодня">
-            сегодня ↓ {formatBytes(view.usage.dayDown)} · ↑ {formatBytes(view.usage.dayUp)}
-          </span>
-          <span title="В этом месяце">
-            месяц ↓ {formatBytes(view.usage.monthDown)} · ↑ {formatBytes(view.usage.monthUp)}
-          </span>
-        </div>
-      {/if}
 
       <button
         class="hero"
