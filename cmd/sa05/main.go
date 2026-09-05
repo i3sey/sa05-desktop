@@ -182,6 +182,14 @@ func (b *App) SelectProfile(id string) error {
 	return b.controller.SelectProfile(b.context(), id)
 }
 
+// CycleProfile switches to the neighbouring profile in subscription order.
+func (b *App) CycleProfile(step int) (string, error) {
+	if err := b.controller.CycleProfile(b.context(), step); err != nil {
+		return "", err
+	}
+	return b.controller.Snapshot().ProfileID, nil
+}
+
 // SelectFastest measures every profile and switches to the quickest.
 func (b *App) SelectFastest() (string, error) {
 	return b.controller.SelectFastest(b.context())

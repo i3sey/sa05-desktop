@@ -19,10 +19,22 @@
   let error = $state('')
   let busy = $state(false)
   let now = $state(Date.now())
+  // Rate history for the sparkline: one sample per backend refresh while connected.
+  let rateHist = $state<{ down: number[]; up: number[] }>({ down: [], up: [] })
+  const HIST_MAX = 60
 
   async function refresh() {
     try {
       view = await backend.View()
+      const snapshot = view.snapshot
+      if (snapshot.status === 'CONNECTED') {
+        rateHist = {
+          down: [...rateHist.down, snapshot.rateDown].slice(-HIST_MAX),
+          up: [...rateHist.up, snapshot.rateUp].slice(-HIST_MAX),
+        }
+      } else if (rateHist.down.length > 0 || rateHist.up.length > 0) {
+        rateHist = { down: [], up: [] }
+      }
     } catch (cause) {
       error = errorText(cause)
     }
@@ -109,27 +121,13 @@
 
   const activeProfile = $derived((view?.profiles ?? []).find((profile) => profile.active))
 
-  // The local endpoints other applications can be pointed at. They are listed only while
-  // something is actually listening: an address shown for a stopped core would send the
-  // user to configure a dead port.
+  // The local MTProto endpoint is listed only while the proxy is actually running:
+  // an address shown for a stopped proxy would send the user to a dead port.
+  // SOCKS5/HTTP live in Settings — they are for manual app configuration, not daily use.
   const endpoints = $derived.by(() => {
     const snapshot = view?.snapshot
     const list: { label: string; value: string; hint: string }[] = []
     if (!snapshot) return list
-    if (snapshot.status === 'CONNECTED' && snapshot.socksPort > 0) {
-      list.push({
-        label: 'SOCKS5',
-        value: `127.0.0.1:${snapshot.socksPort}`,
-        hint: 'браузеры, торренты, curl --socks5-hostname',
-      })
-    }
-    if (snapshot.status === 'CONNECTED' && snapshot.httpPort > 0) {
-      list.push({
-        label: 'HTTP',
-        value: `127.0.0.1:${snapshot.httpPort}`,
-        hint: 'http_proxy / https_proxy',
-      })
-    }
     if (snapshot.telegramOn) {
       list.push({
         label: 'MTProto',
@@ -139,6 +137,51 @@
     }
     return list
   })
+
+  const heroBusy = $derived(
+    view?.snapshot.status === 'CONNECTING' || view?.snapshot.status === 'RECOVERING',
+  )
+  const heroStop = $derived(view?.presentation.primaryAction === 'STOP')
+
+  // One line answering what is routed right now: users confuse "connected" with
+  // "everything goes through the tunnel". Shown only while the core is up.
+  const routeLine = $derived.by(() => {
+    const snapshot = view?.snapshot
+    if (!snapshot || snapshot.status !== 'CONNECTED') return ''
+    const parts: string[] = []
+    if (snapshot.tunOn) parts.push('весь трафик — через туннель')
+    else if (snapshot.systemProxyOn) parts.push('приложения — через прокси')
+    else parts.push('вручную: SOCKS/HTTP из Настроек')
+    if (snapshot.telegramOn) parts.push('Telegram — отдельно')
+    return parts.join(' · ')
+  })
+  const heroSub = $derived.by(() => {
+    const snapshot = view?.snapshot
+    if (!snapshot) return ''
+    if (snapshot.status === 'CONNECTED') {
+      return `↓ ${formatBytes(snapshot.rateDown)}/с · ↑ ${formatBytes(snapshot.rateUp)}/с`
+    }
+    if (snapshot.status === 'CONNECTING' || snapshot.status === 'RECOVERING') {
+      return 'Это может занять несколько секунд'
+    }
+    return ''
+  })
+
+  const isDark = $derived.by(() => {
+    const theme = view?.theme ?? 'auto'
+    if (theme === 'dark') return true
+    if (theme === 'light') return false
+    return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false
+  })
+
+  async function cycleTheme() {
+    await guard(() => backend.SetTheme(isDark ? 'light' : 'dark'))
+  }
+
+  async function closeHelp() {
+    helpOpen = false
+    await guard(() => backend.MarkOnboarded())
+  }
 
   let copied = $state('')
   let copiedTimer: ReturnType<typeof setTimeout> | undefined
@@ -209,6 +252,10 @@
       <span class="sub">{view.subscription.title}</span>
     {/if}
     <div class="spacer"></div>
+    <button class="ghost" onclick={() => (helpOpen = true)} aria-label="Обучение">?</button>
+    <button class="ghost" onclick={cycleTheme} aria-label={isDark ? 'Светлая тема' : 'Тёмная тема'}>
+      {isDark ? '☀' : '☾'}
+    </button>
     <button class="ghost" onclick={() => (screen = 'settings')} aria-label="Настройки">⚙</button>
   </div>
 
@@ -221,6 +268,7 @@
           <p class="desc">{view.presentation.description}</p>
         </div>
       </div>
+      {#if routeLine}<p class="route" title="Что сейчас идёт через туннель">⇄ {routeLine}</p>{/if}
 
       {#if view.snapshot.status === 'CONNECTED'}
         <div class="meta">
@@ -237,9 +285,24 @@
         </div>
       {/if}
 
-      <button class="primary" disabled={busy} onclick={primary}>{primaryLabel}</button>
+      <button
+        class="hero"
+        class:busy={heroBusy}
+        class:stop={heroStop}
+        disabled={busy}
+        onclick={primary}
+      >
+        <span class="hero-label">{primaryLabel}</span>
+        {#if heroSub}<span class="hero-sub">{heroSub}</span>{/if}
+      </button>
       {#if error}<p class="error">{error}</p>{/if}
     </div>
+
+    {#if view.snapshot.status === 'CONNECTED'}
+      <div class="card">
+        <Sparkline down={rateHist.down} up={rateHist.up} />
+      </div>
+    {/if}
 
     <div class="rows">
       <div class="row">
@@ -300,7 +363,9 @@
             </div>
             <div class="spacer"></div>
             <span class="pill" class:good={copied === endpoint.value}>
-              {copied === endpoint.value ? 'скопировано' : 'копировать'}
+              {#key copied}<span class="pop"
+                  >{copied === endpoint.value ? 'скопировано' : 'копировать'}</span
+                >{/key}
             </span>
           </button>
         {/each}
@@ -308,18 +373,31 @@
     {/if}
 
     <div class="rows">
-      <button class="row" onclick={() => (screen = 'servers')}>
-        <div>
+      <div class="row">
+        <button class="rowmain" onclick={() => (screen = 'servers')} aria-label="Список серверов">
           <div class="title">Серверы</div>
           <div class="hint">
             {activeProfile
               ? `${activeProfile.flag} ${activeProfile.name}`.trim()
               : 'Сервер не выбран'}
           </div>
-        </div>
+        </button>
         <div class="spacer"></div>
-        <span class="chev">›</span>
-      </button>
+        {#if (view.profiles ?? []).length > 1}
+          <button
+            class="ghost tiny"
+            disabled={busy}
+            onclick={() => guard(() => backend.CycleProfile(-1))}
+            aria-label="Предыдущий сервер"
+          >‹</button>
+          <button
+            class="ghost tiny"
+            disabled={busy}
+            onclick={() => guard(() => backend.CycleProfile(1))}
+            aria-label="Следующий сервер"
+          >›</button>
+        {/if}
+      </div>
       <button class="row" onclick={() => (screen = 'diagnostics')}>
         <div>
           <div class="title">Диагностика</div>

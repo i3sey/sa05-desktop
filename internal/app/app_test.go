@@ -300,6 +300,152 @@ func TestSetThemePersistsAndNormalizes(t *testing.T) {
 	}
 }
 
+func TestTrafficToggleConnectsCore(t *testing.T) {
+	harness := newHarness(t)
+	harness.importAll(t)
+	ctx := context.Background()
+	// Flipping a traffic switch while offline must bring the core up by itself: the
+	// switch means "route me", not "fail with connect first". In a headless test
+	// environment there is no desktop proxy backend, so the toggle itself still
+	// reports an error — but the core has to be connected by then.
+	_ = harness.app.Toggle(ctx, "systemProxy", true)
+	if status := harness.app.Snapshot().Status; status != state.StatusConnected {
+		t.Fatalf("статус ядра = %s", status)
+	}
+	harness.app.Disconnect()
+	_ = harness.app.Toggle(ctx, "tun", true)
+	if status := harness.app.Snapshot().Status; status != state.StatusConnected {
+		t.Fatalf("статус ядра = %s", status)
+	}
+}
+
+func TestReadLogTailCutsAtLineBoundary(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sa05.log")
+	var builder strings.Builder
+	for i := 0; i < 100; i++ {
+		fmt.Fprintf(&builder, "строка %03d\n", i)
+	}
+	if err := os.WriteFile(path, []byte(builder.String()), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	tail, err := readLogTail(path, 100)
+	if err != nil {
+		t.Fatalf("readLogTail: %v", err)
+	}
+	if len(tail) > 200 {
+		t.Fatalf("хвост слишком длинный: %d", len(tail))
+	}
+	if !strings.HasPrefix(tail, "строка ") || !strings.HasSuffix(tail, "\n") {
+		t.Fatalf("граница строки не соблюдена: %q", tail)
+	}
+}
+
+func TestCheckIPDirect(t *testing.T) {
+	harness := newHarness(t)
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(writer, `{"ip": "203.0.113.7", "country": "DE", "city": "Berlin"}`)
+	}))
+	t.Cleanup(server.Close)
+	previous := ipInfoURL
+	ipInfoURL = server.URL
+	t.Cleanup(func() { ipInfoURL = previous })
+
+	info, err := harness.app.CheckIP(context.Background())
+	if err != nil {
+		t.Fatalf("CheckIP: %v", err)
+	}
+	if info.IP != "203.0.113.7" || info.Country != "DE" || info.City != "Berlin" {
+		t.Fatalf("адрес не разобран: %+v", info)
+	}
+	if info.ThroughTunnel {
+		t.Fatal("отключённый клиент якобы пошёл через туннель")
+	}
+}
+
+func TestCycleProfileWrapsAround(t *testing.T) {
+	harness := newHarness(t)
+	harness.importAll(t)
+	ctx := context.Background()
+	stored, err := harness.store.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(stored.Subscription.Profiles) < 2 {
+		t.Fatalf("профилей %d", len(stored.Subscription.Profiles))
+	}
+	second := stored.Subscription.Profiles[1].ID
+	if err := harness.app.CycleProfile(ctx, 1); err != nil {
+		t.Fatalf("CycleProfile(+1): %v", err)
+	}
+	stored, err = harness.store.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if stored.Subscription.ActiveProfileID != second {
+		t.Fatalf("активен %s", stored.Subscription.ActiveProfileID)
+	}
+	// Wrapping past the start lands on the last profile.
+	if err := harness.app.CycleProfile(ctx, -1); err != nil {
+		t.Fatalf("CycleProfile(-1): %v", err)
+	}
+	if err := harness.app.CycleProfile(ctx, -1); err != nil {
+		t.Fatalf("CycleProfile(-1): %v", err)
+	}
+	stored, err = harness.store.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	last := stored.Subscription.Profiles[len(stored.Subscription.Profiles)-1].ID
+	if stored.Subscription.ActiveProfileID != last {
+		t.Fatalf("перенос в начало: %s", stored.Subscription.ActiveProfileID)
+	}
+}
+
+func TestToggleNotificationsSyncsNotifier(t *testing.T) {
+	harness := newHarness(t)
+	ctx := context.Background()
+	if !harness.app.notifier.Enabled {
+		t.Fatal("уведомления выключены на чистой установке")
+	}
+	if err := harness.app.Toggle(ctx, "notifications", false); err != nil {
+		t.Fatalf("Toggle(notifications): %v", err)
+	}
+	stored, err := harness.store.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !stored.Toggles.MuteNotifications || harness.app.notifier.Enabled {
+		t.Fatalf("выключение не применено: %+v", stored.Toggles)
+	}
+	if err := harness.app.Toggle(ctx, "notifications", true); err != nil {
+		t.Fatalf("Toggle(notifications): %v", err)
+	}
+	if !harness.app.notifier.Enabled {
+		t.Fatal("уведомления не включились обратно")
+	}
+}
+
+func TestMarkOnboarded(t *testing.T) {
+	harness := newHarness(t)
+	view, err := harness.app.View()
+	if err != nil {
+		t.Fatalf("View: %v", err)
+	}
+	if view.Onboarded {
+		t.Fatal("тур помечен пройденным на чистой установке")
+	}
+	if err := harness.app.MarkOnboarded(); err != nil {
+		t.Fatalf("MarkOnboarded: %v", err)
+	}
+	view, err = harness.app.View()
+	if err != nil {
+		t.Fatalf("View: %v", err)
+	}
+	if !view.Onboarded {
+		t.Fatal("тур не помечен пройденным")
+	}
+}
+
 func TestTelegramLinkPersistsSecret(t *testing.T) {
 	harness := newHarness(t)
 	link, err := harness.app.TelegramLink()

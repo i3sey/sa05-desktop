@@ -409,6 +409,51 @@ func (a *App) SetTheme(_ context.Context, value string) error {
 	return err
 }
 
+// ensureConnected starts the core when a traffic toggle is flipped while offline,
+// so the switch means "route me" instead of failing with "connect first".
+// Connect errors already explain what is missing (subscription, profile).
+func (a *App) ensureConnected(ctx context.Context) error {
+	if a.states.Snapshot().Status == state.StatusConnected {
+		return nil
+	}
+	return a.Connect(ctx)
+}
+
+// MarkOnboarded records that the first-run tour has been shown. Closing the tour
+// always marks it, so it never nags; reopening stays available from the header.
+func (a *App) MarkOnboarded() error {
+	_, err := a.store.Update(func(next *storage.State) {
+		next.Onboarded = true
+	})
+	return err
+}
+
+// CycleProfile switches to the neighbouring profile in subscription order, wrapping
+// around at the ends. Like SelectProfile it reconnects when the tunnel is up, so the
+// main-screen arrows change the server without opening the list.
+func (a *App) CycleProfile(ctx context.Context, step int) error {
+	stored, err := a.store.Load()
+	if err != nil {
+		return err
+	}
+	profiles := stored.Subscription.Profiles
+	if len(profiles) < 2 {
+		return errors.New("В подписке меньше двух серверов")
+	}
+	current := 0
+	active := stored.Subscription.ActiveProfile()
+	if active != nil {
+		for index, profile := range profiles {
+			if profile.ID == active.ID {
+				current = index
+				break
+			}
+		}
+	}
+	next := (current + step%len(profiles) + len(profiles)) % len(profiles)
+	return a.SelectProfile(ctx, profiles[next].ID)
+}
+
 // PingProfiles measures every profile and caches the results for the servers screen.
 func (a *App) PingProfiles(ctx context.Context) ([]ProfileView, error) {
 	stored, err := a.store.Load()

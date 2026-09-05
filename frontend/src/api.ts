@@ -137,6 +137,7 @@ interface Backend {
   Disconnect(): Promise<void>
   SelectProfile(id: string): Promise<void>
   SelectFastest(): Promise<string>
+  CycleProfile(step: number): Promise<string>
   PingProfiles(): Promise<ProfileView[]>
   Toggle(name: string, enabled: boolean): Promise<void>
   SetTheme(value: string): Promise<void>
@@ -212,6 +213,7 @@ const mock: Backend = {
   Disconnect: async () => {},
   SelectProfile: async () => {},
   SelectFastest: async () => '',
+  CycleProfile: async () => '',
   PingProfiles: async () => [],
   Toggle: async () => {},
   SetTheme: async () => {},
