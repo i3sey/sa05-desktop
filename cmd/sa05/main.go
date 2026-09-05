@@ -46,6 +46,12 @@ func main() {
 }
 
 func run() error {
+	// WebKitGTK + Wayland + NVIDIA (Hyprland): DMABUF-рендерер падает с
+	// "Error 71 dispatching to Wayland display" сразу при старте.
+	// Отключаем его до инициализации WebKit, если пользователь явно не задал иначе.
+	if os.Getenv("WAYLAND_DISPLAY") != "" && os.Getenv("WEBKIT_DISABLE_DMABUF_RENDERER") == "" {
+		os.Setenv("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
+	}
 	app.Version = version
 
 	store, err := storage.Open("")
