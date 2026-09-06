@@ -172,6 +172,12 @@ jobs:
         shell: bash
         run: build/fetch-geoassets.sh build/out/assets
 
+      # Wintun is a runtime DLL, not a Go module: without it next to
+      # sa05-helper.exe the Windows tunnel builds but never comes up.
+      - name: Wintun
+        shell: bash
+        run: build/fetch-wintun.sh build/out
+
       - name: Пакет
         shell: bash
         env:
@@ -180,6 +186,7 @@ jobs:
           name="sa05-$VERSION-windows-amd64"
           mkdir -p "dist/$name"
           cp -r build/out/* "dist/$name/"
+          cp build/install-windows.ps1 "dist/$name/"
           cp README.md LICENSE THIRD_PARTY_NOTICES.md "dist/$name/"
           ( cd dist && 7z a -tzip "$name.zip" "$name" >/dev/null )
           ( cd dist && certutil -hashfile "$name.zip" SHA256 | sed -n 2p | tr -d ' \r' > "$name.zip.sha256" )

@@ -228,6 +228,12 @@ func (b *App) Toggle(name string, enabled bool) error {
 	return b.controller.Toggle(b.context(), name, enabled)
 }
 
+// InstallHelper installs and starts the privileged component (UAC/pkexec
+// prompt), so the TUN toggle works without manual service setup.
+func (b *App) InstallHelper() error {
+	return b.controller.InstallHelper(b.context())
+}
+
 // CheckUpdate asks the release feed for a newer version.
 func (b *App) CheckUpdate() (app.UpdateView, error) {
 	return b.controller.CheckUpdate(b.context())

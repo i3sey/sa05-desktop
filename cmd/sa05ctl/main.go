@@ -44,6 +44,8 @@ const usage = `sa05ctl — отладочный клиент ядра SA05
   sa05ctl tg-link              ссылка для настройки Telegram
   sa05ctl tg-run [транспорт]   поднять Telegram-прокси до Ctrl-C (auto|cf|ws|tcp)
   sa05ctl tun <status|up|down> управление туннелем через системный компонент
+                               tun up <порт> [bypass...] — bypass: IP/имена серверов
+                               для прямых маршрутов (нужны на Windows без SO_MARK)
 `
 
 func main() {
@@ -447,8 +449,8 @@ func tunCommand(ctx context.Context, args []string) error {
 		printTunStatus(status)
 		return nil
 	case "up":
-		if len(args) != 2 {
-			return errors.New("нужен порт SOCKS: sa05ctl tun up <порт>")
+		if len(args) < 2 {
+			return errors.New("нужен порт SOCKS: sa05ctl tun up <порт> [bypass...]")
 		}
 		port, err := strconv.Atoi(args[1])
 		if err != nil {
@@ -459,6 +461,7 @@ func tunCommand(ctx context.Context, args []string) error {
 			DNS:        "1.1.1.1",
 			KillSwitch: true,
 			BypassMark: netbypass.Mark,
+			BypassIPs:  args[2:],
 		})
 		if err != nil {
 			return err

@@ -147,6 +147,7 @@ export interface View {
   onboarded: boolean
   telegram: TelegramView
   helperAvailable: boolean
+  helperHint: string
 }
 
 interface Backend {
@@ -159,6 +160,7 @@ interface Backend {
   CycleProfile(step: number): Promise<string>
   PingProfiles(): Promise<ProfileView[]>
   Toggle(name: string, enabled: boolean): Promise<void>
+  InstallHelper(): Promise<void>
   SetTheme(value: string): Promise<void>
   MarkOnboarded(): Promise<void>
   Diagnose(): Promise<DiagnosticsReport>
@@ -227,6 +229,7 @@ const mockView: View = {
   onboarded: true,
   telegram: { transport: 'auto', port: 1443, link: '', applied: false },
   helperAvailable: false,
+  helperHint: 'Нужен системный компонент',
 }
 
 const mock: Backend = {
@@ -241,6 +244,9 @@ const mock: Backend = {
   CycleProfile: async () => '',
   PingProfiles: async () => [],
   Toggle: async () => {},
+  InstallHelper: async () => {
+    throw new Error('Браузерный режим: бэкенд недоступен')
+  },
   SetTheme: async () => {},
   MarkOnboarded: async () => {},
   Diagnose: async () => {

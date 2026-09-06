@@ -72,6 +72,9 @@ type View struct {
 	// HelperAvailable tells the UI whether the privileged component is installed, so a
 	// disabled TUN toggle can explain itself instead of failing on click.
 	HelperAvailable bool `json:"helperAvailable"`
+	// HelperHint is the platform-specific instruction (or one-click action)
+	// for getting the helper when it is missing.
+	HelperHint string `json:"helperHint"`
 }
 
 // TelegramView describes the built-in MTProto proxy for the UI.
@@ -206,6 +209,7 @@ func (a *App) View() (View, error) {
 		Onboarded:       stored.Onboarded,
 		Telegram:        telegram,
 		HelperAvailable: a.HelperAvailable(context.Background()),
+		HelperHint:      helperHint(),
 	}, nil
 }
 

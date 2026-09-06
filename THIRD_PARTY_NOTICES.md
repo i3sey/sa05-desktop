@@ -24,6 +24,16 @@
 Because tg-ws-proxy is GPLv3 and is linked into the SA05 binary, the whole client is
 distributed under GPLv3. See `LICENSE`.
 
+## Wintun (Windows TUN driver)
+
+- Project: https://www.wintun.net
+- Version: 0.14.1 (pinned by SHA-256, see `build/fetch-wintun.sh`)
+- Staged by: `build/fetch-wintun.sh` into `build/out/wintun.dll`, shipped next to
+  `sa05-helper.exe` — the helper loads it at runtime, it is not linked in.
+- Used by: `golang.zx2c4.com/wireguard/tun` (via `tun2socks`) to create the `sa05`
+  adapter on Windows.
+- License: MIT (Copyright © WireGuard LLC)
+
 ## Go dependencies
 
 Everything else is a normal Go module dependency; see `go.mod` / `go.sum` for exact

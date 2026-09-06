@@ -185,6 +185,11 @@
     await guard(() => backend.Toggle(name, next))
   }
 
+  // One-click helper setup: elevated install, then the view refresh shows TUN live.
+  async function installHelper() {
+    await guard(() => backend.InstallHelper())
+  }
+
   // The theme lives in state.json and arrives with every View; the DOM attribute is
   // just its projection so CSS can switch palettes. A localStorage mirror keeps the
   // first paint correct before the first View arrives.
@@ -292,12 +297,15 @@
         <button class="rowmain" onclick={() => (details = 'tun')} aria-label="Как работает TUN">
           <div class="title">TUN</div>
           <div class="hint">
-            {view.helperAvailable
-              ? 'Весь трафик системы через туннель'
-              : 'Нужен системный компонент: sudo build/install-linux.sh'}
+            {view.helperAvailable ? 'Весь трафик системы через туннель' : view.helperHint}
           </div>
         </button>
         <div class="spacer"></div>
+        {#if !view.helperAvailable}
+          <button class="install" onclick={installHelper} disabled={busy}>
+            Установить
+          </button>
+        {/if}
         <span class="chev">›</span>
         <Switch
           label="TUN"

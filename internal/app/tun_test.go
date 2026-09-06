@@ -7,8 +7,10 @@ import (
 	"testing"
 
 	"github.com/fife/sa05-desktop/internal/core/state"
+	"github.com/fife/sa05-desktop/internal/core/subscription"
 	"github.com/fife/sa05-desktop/internal/ipc"
 	"github.com/fife/sa05-desktop/internal/netbypass"
+	"github.com/fife/sa05-desktop/internal/storage"
 )
 
 // fakeHelper stands in for the privileged daemon: the controller must talk to it over the
@@ -201,5 +203,56 @@ func TestHelperAvailability(t *testing.T) {
 	attachHelper(t, harness.app, &fakeHelper{})
 	if !harness.app.HelperAvailable(context.Background()) {
 		t.Fatal("запущенный хелпер не обнаружен")
+	}
+}
+
+func TestTunPassesServerBypassIPs(t *testing.T) {
+	harness := newHarness(t)
+	helper := &fakeHelper{}
+	attachHelper(t, harness.app, helper)
+	ctx := context.Background()
+
+	proxyJSON := `{
+      "remarks": "proxy",
+      "inbounds": [{
+        "tag": "socks", "listen": "127.0.0.1", "port": 10808,
+        "protocol": "socks", "settings": {"udp": true, "auth": "noauth"}
+      }],
+      "outbounds": [{
+        "tag": "proxy", "protocol": "vless",
+        "settings": {"vnext": [{"address": "203.0.113.10", "port": 443,
+          "users": [{"id": "11111111-1111-1111-1111-111111111111"}]}]}
+      }]
+    }`
+	if _, err := harness.store.Update(func(next *storage.State) {
+		next.Subscription.URL = "https://example.invalid/sub"
+		next.Subscription.Title = "test"
+		next.Subscription.Profiles = []subscription.Profile{
+			{ID: "proxy-1", Remarks: "proxy", JSON: proxyJSON},
+		}
+		next.Subscription.ActiveProfileID = "proxy-1"
+	}); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	_ = ctx
+	stored, err := harness.store.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	ips := tunnelBypassIPs(stored)
+	if len(ips) != 1 || ips[0] != "203.0.113.10" {
+		t.Fatalf("bypass IPs = %q, ожидалось [203.0.113.10]", ips)
+	}
+}
+
+func TestTunnelBypassIPsEmptyForDirectProfile(t *testing.T) {
+	harness := newHarness(t)
+	harness.importAll(t)
+	stored, err := harness.store.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if ips := tunnelBypassIPs(stored); len(ips) != 0 {
+		t.Fatalf("bypass IPs = %q, ожидалось пусто", ips)
 	}
 }

@@ -211,3 +211,28 @@ func TestClientReconnectsAfterHelperRestart(t *testing.T) {
 		t.Fatalf("после перезапуска: %v", err)
 	}
 }
+
+func TestTunUpValidationBounds(t *testing.T) {
+	valid := TunUp{SocksPort: 10808, DNS: "1.1.1.1", BypassIPs: []string{"1.2.3.4", "example.com"}}
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("валидный запрос отклонён: %v", err)
+	}
+	for _, request := range []TunUp{
+		{SocksPort: 0},
+		{SocksPort: 10808, DNS: "not-an-ip"},
+		{SocksPort: 10808, BypassIPs: []string{"a;b"}},
+		{SocksPort: 10808, BypassIPs: []string{"http://example.com/x"}},
+		{SocksPort: 10808, BypassIPs: []string{""}},
+	} {
+		if err := request.Validate(); err == nil {
+			t.Fatalf("невалидный запрос принят: %+v", request)
+		}
+	}
+	many := TunUp{SocksPort: 10808}
+	for index := 0; index < maxBypassIPs+1; index++ {
+		many.BypassIPs = append(many.BypassIPs, "10.0.0.1")
+	}
+	if err := many.Validate(); err == nil {
+		t.Fatal("переполнение bypass-списка принято")
+	}
+}

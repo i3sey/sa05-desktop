@@ -57,6 +57,12 @@ type TunUp struct {
 	// BypassMark is the fwmark the client sets on its own sockets so they leave the
 	// machine directly instead of looping into the tunnel.
 	BypassMark uint32 `json:"bypassMark"`
+	// BypassIPs are the VPN server addresses that must stay outside the tunnel.
+	// On Linux the fwmark already exempts the core's sockets; on Windows there is
+	// no SO_MARK, so the helper installs direct host routes for these instead.
+	// Entries are IP literals or DNS names from the profile's outbounds; the helper
+	// resolves names itself. Empty means "no host routes" (Linux-only setups).
+	BypassIPs []string `json:"bypassIps,omitempty"`
 }
 
 // Response is one helper reply.
@@ -100,6 +106,11 @@ func (r Request) Validate() error {
 	return nil
 }
 
+// maxBypassIPs bounds how many server addresses one request may carry. A profile
+// holds a handful of outbounds; anything larger is a malformed or hostile request,
+// and each entry turns into a system route, so the count is capped.
+const maxBypassIPs = 64
+
 // Validate checks the tunnel parameters. The helper runs as root, so every field is
 // bounded here rather than trusted.
 func (t TunUp) Validate() error {
@@ -108,6 +119,35 @@ func (t TunUp) Validate() error {
 	}
 	if t.DNS != "" && !isIPv4(t.DNS) {
 		return fmt.Errorf("некорректный адрес DNS: %q", t.DNS)
+	}
+	if len(t.BypassIPs) > maxBypassIPs {
+		return fmt.Errorf("слишком много bypass-адресов: %d", len(t.BypassIPs))
+	}
+	for _, entry := range t.BypassIPs {
+		if err := validateBypassIP(entry); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateBypassIP accepts an IP literal or a DNS name from a profile outbound.
+// The value ends up in a routing table (after resolution), so anything that looks
+// like a shell fragment, a URL or a path is rejected here, before the helper acts.
+func validateBypassIP(value string) error {
+	if value == "" || len(value) > 253 {
+		return fmt.Errorf("некорректный bypass-адрес: %q", value)
+	}
+	for index := 0; index < len(value); index++ {
+		symbol := value[index]
+		isLower := symbol >= 'a' && symbol <= 'z'
+		isUpper := symbol >= 'A' && symbol <= 'Z'
+		isDigit := symbol >= '0' && symbol <= '9'
+		if isLower || isUpper || isDigit || symbol == '.' || symbol == '-' ||
+			symbol == '_' || symbol == ':' {
+			continue
+		}
+		return fmt.Errorf("некорректный bypass-адрес: %q", value)
 	}
 	return nil
 }

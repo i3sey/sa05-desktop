@@ -65,7 +65,7 @@
       : mode === 'tun'
         ? view.helperAvailable
           ? 'Весь трафик устройства — через туннель'
-          : 'Нужен системный компонент: sudo build/install-linux.sh'
+          : view.helperHint
         : `MTProto на порту ${view.telegram.port}`,
   )
 </script>

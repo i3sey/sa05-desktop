@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Builds the frontend bundle and both binaries into build/out.
+# Builds the frontend bundle and all binaries into build/out.
 #
 # Wails needs its own build tags; webkit2_41 selects the WebKitGTK 4.1 API, which is what
 # current distributions ship.
@@ -24,6 +24,7 @@ echo ">> Building binaries"
 mkdir -p "$OUT"
 go build -tags "$TAGS" -ldflags "-w -s" -o "$OUT/sa05" ./cmd/sa05
 go build -ldflags "-w -s" -o "$OUT/sa05ctl" ./cmd/sa05ctl
+go build -ldflags "-w -s" -o "$OUT/sa05-helper" ./cmd/sa05-helper
 
 echo ">> Done"
 ls -lh "$OUT"

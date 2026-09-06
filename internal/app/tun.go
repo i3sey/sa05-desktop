@@ -3,9 +3,11 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/fife/sa05-desktop/internal/core/state"
+	"github.com/fife/sa05-desktop/internal/core/xrayconf"
 	"github.com/fife/sa05-desktop/internal/ipc"
 	"github.com/fife/sa05-desktop/internal/netbypass"
 	"github.com/fife/sa05-desktop/internal/storage"
@@ -38,6 +40,10 @@ func (a *App) enableTun(ctx context.Context) error {
 		AllowIPv6Bypass: stored.Toggles.AllowIPv6Bypass,
 		KillSwitch:      stored.Toggles.KillSwitch,
 		BypassMark:      netbypass.Mark,
+		// Windows has no SO_MARK, so the helper needs the server addresses to
+		// keep them outside the tunnel via host routes. On Linux they are
+		// ignored (the fwmark already exempts the core's sockets).
+		BypassIPs: tunnelBypassIPs(stored),
 	})
 	if err != nil {
 		a.states.Update(func(next *state.Snapshot) {
@@ -91,10 +97,66 @@ func (a *App) disableTun(ctx context.Context) error {
 	return nil
 }
 
+// tunnelBypassIPs lists the active profile's server addresses for the helper's
+// host routes (Windows). A profile that fails to parse contributes nothing: the
+// tunnel still comes up, it just cannot exempt that server on mark-less systems.
+func tunnelBypassIPs(stored storage.State) []string {
+	profile := stored.Subscription.ActiveProfile()
+	if profile == nil {
+		return nil
+	}
+	hosts, err := xrayconf.ExtractHosts(profile.JSON)
+	if err != nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	result := []string{}
+	for _, host := range hosts {
+		if host.Address == "" || seen[host.Address] {
+			continue
+		}
+		seen[host.Address] = true
+		result = append(result, host.Address)
+	}
+	return result
+}
+
 // HelperAvailable reports whether the privileged component is installed and reachable, so
 // the UI can explain a disabled TUN toggle instead of failing on click.
 func (a *App) HelperAvailable(ctx context.Context) bool {
 	callCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	return a.helper.Available(callCtx)
+}
+
+// installWaitTimeout bounds waiting for the helper after an elevated install:
+// service registration plus first listen is seconds, a minute means it failed.
+const installWaitTimeout = 90 * time.Second
+
+// InstallHelper installs and starts the privileged component, asking the OS for
+// elevation once (UAC on Windows, pkexec on Linux), then waits until it answers.
+// A failure keeps the manual instruction from View.HelperHint as the fallback.
+func (a *App) InstallHelper(ctx context.Context) error {
+	if a.HelperAvailable(ctx) {
+		return nil
+	}
+	stepCtx, cancel := context.WithTimeout(ctx, installWaitTimeout)
+	defer cancel()
+	if err := installHelperStep(stepCtx); err != nil {
+		return err
+	}
+	deadline := time.Now().Add(installWaitTimeout)
+	for {
+		if a.HelperAvailable(ctx) {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("системный компонент не отвечает после установки")
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Second):
+		}
+	}
 }

@@ -27,14 +27,23 @@ func main() {
 
 	logger := log.New(os.Stderr, "sa05-helper: ", log.LstdFlags)
 
-	if os.Geteuid() != 0 {
-		logger.Println("предупреждение: хелпер запущен не от root, создание TUN, скорее всего, не удастся")
+	if runServiceIfRequested(logger, socketPath, allowUsers) {
+		return
+	}
+
+	if !isElevated() {
+		logger.Println("предупреждение: хелпер запущен без прав администратора, создание TUN, скорее всего, не удастся")
 	}
 
 	authorize, err := buildAuthorizer(*allowUsers)
 	if err != nil {
 		logger.Fatalf("%v", err)
 	}
+
+	// A previous helper may have died with its policy still installed. Reap it
+	// now, while no tunnel is supposed to be up, rather than stacking new
+	// routes on top of stale ones.
+	tun.CleanupStale()
 
 	tunnel := &tun.Tunnel{}
 	handler := &helper{tunnel: tunnel, logger: logger}
@@ -112,6 +121,7 @@ func (h *helper) TunUp(_ context.Context, request ipc.TunUp) (ipc.Status, error)
 		AllowIPv6Bypass: request.AllowIPv6Bypass,
 		KillSwitch:      request.KillSwitch,
 		Mark:            request.BypassMark,
+		BypassIPs:       request.BypassIPs,
 	})
 	if err != nil {
 		h.logger.Printf("туннель не поднят: %v", err)

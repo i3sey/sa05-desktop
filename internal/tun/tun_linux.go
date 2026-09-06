@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"sync"
 	"time"
 
@@ -31,6 +32,9 @@ type Tunnel struct {
 	config  Config
 	up      bool
 	message string
+	// dnsMode is how applyDNS took over resolution ("resolvectl", "resolv.conf"
+	// or "" when neither worked).
+	dnsMode string
 }
 
 // Up creates the device and points the machine's traffic at the client's SOCKS port.
@@ -64,6 +68,9 @@ func (t *Tunnel) Up(config Config) (State, error) {
 	if config.KillSwitch {
 		t.message = "Kill-switch активен: без туннеля трафик блокируется"
 	}
+	// DNS never fails Up: the tunnel carries traffic either way, and a resolver
+	// hiccup must not cost the whole connection. Shortfalls append to message.
+	t.applyDNS(config)
 	return t.stateLocked(), nil
 }
 
@@ -260,6 +267,7 @@ func (t *Tunnel) downLocked() {
 		_ = netlink.RuleDel(rule)
 	}
 	flushTable(TableID)
+	t.revertDNS()
 
 	if t.stack != nil {
 		t.stack.Close()
@@ -276,6 +284,7 @@ func (t *Tunnel) downLocked() {
 	t.up = false
 	t.message = ""
 	t.config = Config{}
+	t.dnsMode = ""
 }
 
 func addAddress(link netlink.Link, cidr string) error {
@@ -302,6 +311,27 @@ func waitForLink(name string, timeout time.Duration) (netlink.Link, error) {
 			return nil, fmt.Errorf("интерфейс %s не появился: %w", name, err)
 		}
 		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// CleanupStale reaps tunnel policy left by a crashed helper: table routes, any
+// rule pointing at the tunnel table (whatever mark a previous run used) and a
+// leftover device. DNS is reverted too. Best-effort, for helper startup.
+func CleanupStale() {
+	if rules, err := netlink.RuleList(netlink.FAMILY_ALL); err == nil {
+		for index := range rules {
+			if rules[index].Table == TableID {
+				_ = netlink.RuleDel(&rules[index])
+			}
+		}
+	}
+	flushTable(TableID)
+	_ = runDNSCmd("resolvectl", "revert", DeviceName)
+	if _, err := os.Stat(resolvConfBackupPath); err == nil {
+		_ = restoreResolvConf()
+	}
+	if link, err := netlink.LinkByName(DeviceName); err == nil {
+		_ = netlink.LinkDel(link)
 	}
 }
 
