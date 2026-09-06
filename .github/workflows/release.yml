@@ -226,7 +226,7 @@ jobs:
 
       # Draft, not published: the tag builds the artifacts, a human decides when they go
       # out. Publishing is one click in the releases UI.
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           draft: true
           generate_release_notes: true
