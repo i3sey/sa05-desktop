@@ -275,6 +275,47 @@ func TestExtractsEveryProxyEndpoint(t *testing.T) {
 	}
 }
 
+func TestExtractsWireGuardPeersAndBuildsPingConfig(t *testing.T) {
+	raw := `{
+  "inbounds": [{"listen":"127.0.0.1","port":10808,"protocol":"socks","settings":{"udp":true}}],
+  "outbounds": [{
+    "tag": "game",
+    "protocol": "wireguard",
+    "settings": {
+      "secretKey": "client-private-key",
+      "address": ["10.55.0.2/32"],
+      "peers": [
+        {"endpoint":"game.example:51820","publicKey":"server-public-key"},
+        {"endpoint":"[2001:db8::1]:51821","publicKey":"backup-public-key"}
+      ]
+    }
+  }]
+}`
+	hosts, err := ExtractHosts(raw)
+	if err != nil {
+		t.Fatalf("ExtractHosts: %v", err)
+	}
+	if len(hosts) != 2 {
+		t.Fatalf("хостов %d, ожидалось 2", len(hosts))
+	}
+	if hosts[0].Protocol != "wireguard" || hosts[0].Address != "game.example" || hosts[0].Port != 51820 {
+		t.Fatalf("неверный WireGuard endpoint: %+v", hosts[0])
+	}
+	if hosts[1].Address != "2001:db8::1" || hosts[1].Port != 51821 {
+		t.Fatalf("неверный IPv6 WireGuard endpoint: %+v", hosts[1])
+	}
+
+	ping, err := BuildPingConfig(raw, hosts[1], 32126)
+	if err != nil {
+		t.Fatalf("BuildPingConfig: %v", err)
+	}
+	root := decode(t, ping.RuntimeJSON)
+	peers := outbound(t, root, 0)["settings"].(map[string]any)["peers"].([]any)
+	if len(peers) != 1 || peers[0].(map[string]any)["endpoint"] != "[2001:db8::1]:51821" {
+		t.Fatalf("выбран не тот WireGuard peer: %v", peers)
+	}
+}
+
 func TestPingConfigKeepsOnlySelectedEndpointAndForcesRouting(t *testing.T) {
 	hosts, err := ExtractHosts(realityConfig)
 	if err != nil {

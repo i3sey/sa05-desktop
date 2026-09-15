@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -479,6 +480,8 @@ func BuildPingConfig(raw string, host Host, socksPort int) (PingConfig, error) {
 		endpointsKey = "vnext"
 	case settings["servers"] != nil:
 		endpointsKey = "servers"
+	case str(selected["protocol"]) == "wireguard" && settings["peers"] != nil:
+		endpointsKey = "peers"
 	case str(selected["protocol"]) == "hysteria" && intOf(settings["version"], 0) == 2:
 		endpointsKey = ""
 	default:
@@ -608,6 +611,22 @@ func endpointsOf(protocol string, settings map[string]any) []any {
 	if servers, ok := settings["servers"].([]any); ok {
 		return servers
 	}
+	if protocol == "wireguard" {
+		peers, _ := settings["peers"].([]any)
+		result := make([]any, 0, len(peers))
+		for _, entry := range peers {
+			peer, ok := entry.(map[string]any)
+			if !ok {
+				continue
+			}
+			address, port, ok := wireGuardEndpoint(str(peer["endpoint"]))
+			if !ok {
+				continue
+			}
+			result = append(result, map[string]any{"address": address, "port": port})
+		}
+		return result
+	}
 	if protocol == "hysteria" && intOf(settings["version"], 0) == 2 {
 		return []any{map[string]any{
 			"address": str(settings["address"]),
@@ -615,6 +634,18 @@ func endpointsOf(protocol string, settings map[string]any) []any {
 		}}
 	}
 	return nil
+}
+
+func wireGuardEndpoint(endpoint string) (string, int, bool) {
+	host, rawPort, err := net.SplitHostPort(strings.TrimSpace(endpoint))
+	if err != nil {
+		return "", 0, false
+	}
+	port, err := strconv.Atoi(rawPort)
+	if err != nil || strings.TrimSpace(host) == "" || port < 1 || port > 65535 {
+		return "", 0, false
+	}
+	return host, port, true
 }
 
 func tagSet(root map[string]any) map[string]bool {
